@@ -1,0 +1,7 @@
+.aether-engine.sqlite3*
+.aether-backups/
+backups/
+.venv/
+__pycache__/
+.pytest_cache/
+*.egg-info/

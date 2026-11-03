@@ -1,0 +1,84 @@
+# Aether Engine
+
+A local-first command-line tool for tracking project tasks and recording a searchable event history. By default, data is stored in `.aether-engine.sqlite3` at the nearest parent directory containing `pyproject.toml`; outside a project, it is stored in the current directory. Each project therefore gets its own database.
+
+## Install and test
+
+```bash
+python3 -m venv .venv
+source .venv/bin/activate
+python -m pip install -e ".[dev]"
+python -m pytest
+```
+
+On Windows, activate with `.venv\Scripts\activate` instead.
+
+The editable install exposes the `aether-engine` command from this checkout. After code changes, rerun `python -m pytest`; to verify the installed command, run `aether-engine --help`.
+
+## Usage
+
+```bash
+# Record and review project history
+aether-engine event add "First milestone completed" --topic release
+aether-engine event list --limit 10
+aether-engine event list --search build --topic release --since 2026-11-01
+
+# Create, review, and complete tasks
+aether-engine task add "Write the getting-started guide" --description "Include install and CLI examples" --priority high --due 2026-12-01
+aether-engine task list --status pending --search guide
+aether-engine task edit 1 --priority normal --due 2026-12-10
+aether-engine task complete 1
+aether-engine task reopen 1
+
+# See task progress and recent project activity together
+aether-engine status
+
+# Check database, backup, permissions, and scheduled backup health
+aether-engine doctor
+
+# Export a portable JSON copy (prints to stdout if no file is given)
+aether-engine export project-backup.json
+
+# Create a dated backup in .aether-backups/
+aether-engine backup --keep 30
+aether-engine backup schedule install --keep 30
+aether-engine backup schedule status
+
+# Remove the daily schedule
+aether-engine backup schedule uninstall
+
+# Restore into a new/empty project database
+aether-engine restore project-backup.json
+
+# Intentionally replace existing tasks and events
+aether-engine restore project-backup.json --replace
+```
+
+The `--priority` option accepts `low`, `normal` (the default), or `high`. The optional `--due` date must use `YYYY-MM-DD`; overdue tasks are highlighted on the status dashboard.
+Edit tasks with `task edit ID` and one or more of `--title`, `--description`, `--priority`, or `--due`; use `--clear-due` to remove a due date. Task `--search` matches titles and descriptions; event `--search` matches topic and message, and event history can also be filtered by exact `--topic` and inclusive UTC `--since`/`--until` dates.
+
+`aether-engine backup` writes a timestamped JSON snapshot to `.aether-backups/` beside the selected database; pass `--directory PATH` to choose another folder. It keeps the newest 30 timestamped Aether backups by default, pruning older Aether snapshot files after a successful backup. Set `--keep N` to change the limit; it must be at least one. Backup directories are restricted to owner-only access (`700`), snapshots and scheduler logs to owner read/write (`600`); older matching snapshots are secured when the next backup runs. Unrelated files in the backup directory are left alone. Replacing a non-empty database with `restore --replace` first creates a safety backup automatically, subject to the same retention policy. JSON exports include tasks, events, and a schema version. Exporting to a new file is the default; pass `--force` only when intentionally replacing an existing file.
+
+On macOS, `aether-engine backup schedule install` installs a per-project user LaunchAgent that runs backups daily at **9:00 AM local time** while your user session is available. The job uses the current Python environment and an explicit database path, and retains 30 snapshots by default. Set a different scheduled retention with `aether-engine backup schedule install --keep N` (reinstall the schedule to apply a changed value). `backup schedule status` reports whether it is loaded and the last LaunchAgent exit code, and points to the protected stderr log if the last run failed; remove it with `backup schedule uninstall`.
+
+`aether-engine doctor` performs read-only checks of the selected database, newest backup validity, backup permissions, and macOS LaunchAgent status/last exit code. Missing backups or an uninstalled schedule are reported as warnings; detected corruption, insecure permissions, or a failed installed schedule make the command exit nonzero. The doctor does not format or modify project source files.
+
+For an optional off-machine copy, `backup_replication.py` makes a real versioned JSON snapshot from an existing Aether database, then can send that snapshot using your configured SSH agent/config. Run from the project directory:
+
+```bash
+python backup_replication.py --database .aether-engine.sqlite3
+python backup_replication.py --database .aether-engine.sqlite3 \
+  --remote-user BACKUP_USER \
+  --remote-host backup.example.net \
+  --remote-dir /srv/backups/aether
+```
+
+Without all three remote options it runs local-only and never contacts a host. The remote destination directory must already exist and be writable. An SSH key can optionally be selected with `--identity-file`; otherwise OpenSSH uses its normal SSH configuration/agent. Remote transfer has not been tested against a real host.
+
+Use `--database PATH` before the command to select a different SQLite database. For example:
+
+```bash
+aether-engine --database ./data/project.sqlite3 task list
+```
+
+Restore validates the full versioned backup before writing. It refuses to modify a non-empty database unless `--replace` is provided; replacement is transactional, so invalid data does not partially replace existing records.
