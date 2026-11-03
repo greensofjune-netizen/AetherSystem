@@ -1,12 +1,14 @@
 import json
+import os
 import sqlite3
+import subprocess
 from datetime import date, datetime, timedelta, timezone
 from pathlib import Path
 
 import pytest
 
 from aether_engine.cli import _resolve_database_path, main
-from aether_engine.database import AetherStore
+from aether_engine.database import AetherStore, _secure_windows_file
 
 
 def test_event_commands_persist_history(tmp_path: Path, capsys) -> None:
@@ -223,12 +225,110 @@ def test_existing_task_database_is_migrated(tmp_path: Path) -> None:
             """
         )
 
-    tasks = AetherStore(database).list_tasks()
+    store = AetherStore(database)
+    tasks = store.list_tasks()
 
     assert len(tasks) == 1
     assert tasks[0].title == "Legacy task"
     assert tasks[0].priority == "normal"
     assert tasks[0].due_date is None
+    with sqlite3.connect(database) as connection:
+        assert connection.execute("PRAGMA user_version").fetchone()[0] == 2
+
+
+def test_schema_migrations_are_versioned_and_idempotent(tmp_path: Path) -> None:
+    database = tmp_path / "versioned.sqlite3"
+
+    AetherStore(database)
+    with sqlite3.connect(database) as connection:
+        assert connection.execute("PRAGMA user_version").fetchone()[0] == 2
+
+    store = AetherStore(database)
+    assert store.list_tasks() == []
+    with sqlite3.connect(database) as connection:
+        assert connection.execute("PRAGMA user_version").fetchone()[0] == 2
+
+
+def test_newer_schema_version_is_rejected_without_downgrade(
+    tmp_path: Path,
+) -> None:
+    database = tmp_path / "future.sqlite3"
+    with sqlite3.connect(database) as connection:
+        connection.execute("PRAGMA user_version = 99")
+
+    with pytest.raises(ValueError, match="newer than supported"):
+        AetherStore(database)
+
+    with sqlite3.connect(database) as connection:
+        assert connection.execute("PRAGMA user_version").fetchone()[0] == 99
+
+
+def test_failed_schema_migration_rolls_back_version_and_ddl(
+    tmp_path: Path,
+) -> None:
+    database = tmp_path / "incomplete.sqlite3"
+    with sqlite3.connect(database) as connection:
+        connection.execute(
+            """
+            CREATE TABLE events (
+                id INTEGER PRIMARY KEY,
+                topic TEXT NOT NULL,
+                message TEXT NOT NULL,
+                created_at TEXT NOT NULL
+            )
+            """
+        )
+        connection.execute("PRAGMA user_version = 1")
+
+    with pytest.raises(sqlite3.OperationalError, match="no such table: tasks"):
+        AetherStore(database)
+
+    with sqlite3.connect(database) as connection:
+        assert connection.execute("PRAGMA user_version").fetchone()[0] == 1
+        assert connection.execute(
+            "SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'tasks'"
+        ).fetchone() is None
+
+
+@pytest.mark.skipif(os.name == "nt", reason="POSIX file modes are not Windows ACLs")
+def test_database_files_are_private_and_existing_modes_are_repaired(
+    tmp_path: Path,
+) -> None:
+    database = tmp_path / "private.sqlite3"
+    store = AetherStore(database)
+    assert database.stat().st_mode & 0o777 == 0o600
+
+    database.chmod(0o644)
+    store.add_task("Repair database permissions")
+    assert database.stat().st_mode & 0o777 == 0o600
+
+
+def test_windows_database_acl_is_restricted_to_current_user(
+    tmp_path: Path, monkeypatch
+) -> None:
+    calls: list[list[str]] = []
+    path = tmp_path / "private database.sqlite3"
+
+    def fake_icacls(command: list[str], **_kwargs) -> subprocess.CompletedProcess[str]:
+        calls.append(command)
+        return subprocess.CompletedProcess(command, 0, "Successfully processed", "")
+
+    monkeypatch.setenv("USERDOMAIN", "AETHER")
+    monkeypatch.setenv("USERNAME", "engine-user")
+    monkeypatch.setattr("aether_engine.database.subprocess.run", fake_icacls)
+
+    _secure_windows_file(path)
+
+    assert calls == [
+        [
+            "icacls",
+            str(path),
+            "/reset",
+            "/inheritance:r",
+            "/grant:r",
+            "AETHER\\engine-user:(F)",
+        ]
+    ]
 
 
 def test_task_can_be_edited_and_reopened(tmp_path: Path, capsys) -> None:

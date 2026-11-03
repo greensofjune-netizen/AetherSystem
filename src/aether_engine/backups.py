@@ -21,7 +21,8 @@ def secure_backup_directory(directory: Path) -> None:
             continue
         if path.is_file() and (
             _BACKUP_NAME.fullmatch(path.name)
-            or path.name in ("launchd.stdout.log", "launchd.stderr.log")
+            or path.name
+            in ("launchd.stdout.log", "launchd.stderr.log", "last-exit-code")
         ):
             path.chmod(0o600)
 

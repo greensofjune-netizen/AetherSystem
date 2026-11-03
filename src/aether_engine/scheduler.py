@@ -4,6 +4,7 @@ import hashlib
 import os
 import plistlib
 import re
+import shlex
 import subprocess
 import sys
 import tempfile
@@ -15,10 +16,152 @@ from .backups import DEFAULT_BACKUP_RETENTION, secure_backup_directory
 _LABEL_PREFIX = "com.aethersystem.backup"
 _MARKER_KEY = "AETHER_ENGINE_DATABASE"
 _LAST_EXIT_CODE = re.compile(r"^\s*last exit code = (-?\d+)\s*$", re.MULTILINE)
+_CRON_MARKER_PREFIX = "# AETHER_ENGINE_BACKUP:"
 
 
 class SchedulerError(RuntimeError):
     pass
+
+
+def _cron_identity(database_path: str | Path) -> tuple[str, Path]:
+    database = Path(database_path).expanduser().resolve()
+    digest = hashlib.sha256(os.fsencode(database)).hexdigest()[:12]
+    return f"{_CRON_MARKER_PREFIX}{digest}", database.parent / ".aether-backups"
+
+
+def _read_crontab(
+    runner: Callable[..., subprocess.CompletedProcess[str]],
+) -> str:
+    try:
+        result = runner(
+            ["crontab", "-l"], capture_output=True, text=True, check=False
+        )
+    except OSError as error:
+        raise SchedulerError(f"Could not read the user crontab: {error}") from error
+    if result.returncode == 0:
+        return result.stdout
+    if "no crontab" in result.stderr.lower():
+        return ""
+    detail = result.stderr.strip() or result.stdout.strip()
+    raise SchedulerError(f"Could not read the user crontab: {detail}")
+
+
+def _write_crontab(
+    contents: str,
+    runner: Callable[..., subprocess.CompletedProcess[str]],
+) -> None:
+    try:
+        result = runner(
+            ["crontab", "-"],
+            input=contents,
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+    except OSError as error:
+        raise SchedulerError(f"Could not update the user crontab: {error}") from error
+    if result.returncode != 0:
+        detail = result.stderr.strip() or result.stdout.strip()
+        raise SchedulerError(f"Could not update the user crontab: {detail}")
+
+
+def _install_cron_schedule(
+    database_path: str | Path,
+    *,
+    python_executable: str,
+    keep: int,
+    runner: Callable[..., subprocess.CompletedProcess[str]],
+) -> Path:
+    database = Path(database_path).expanduser().resolve()
+    marker, backup_directory = _cron_identity(database)
+    if keep < 1:
+        raise ValueError("Backup retention count must be at least 1.")
+    secure_backup_directory(backup_directory)
+    for protected_path in (
+        backup_directory / "launchd.stdout.log",
+        backup_directory / "launchd.stderr.log",
+        backup_directory / "last-exit-code",
+    ):
+        if protected_path.is_symlink():
+            raise SchedulerError(
+                f"Refusing to use a symlink as a scheduled backup file: {protected_path}"
+            )
+    current = _read_crontab(runner)
+    preserved = [
+        line for line in current.splitlines() if marker not in line
+    ]
+    command = " ".join(
+        shlex.quote(part)
+        for part in (
+            str(Path(python_executable).expanduser().resolve()),
+            "-m",
+            "aether_engine",
+            "--database",
+            str(database),
+            "backup",
+            "--directory",
+            str(backup_directory),
+            "--keep",
+            str(keep),
+        )
+    )
+    stdout_log = backup_directory / "launchd.stdout.log"
+    stderr_log = backup_directory / "launchd.stderr.log"
+    result_file = backup_directory / "last-exit-code"
+    entry = (
+        f"0 9 * * * umask 077; {command} >> {shlex.quote(str(stdout_log))} "
+        f"2>> {shlex.quote(str(stderr_log))}; result=$?; "
+        f"printf '%s\\n' \"$result\" > {shlex.quote(str(result_file))} {marker}"
+    )
+    contents = "\n".join((*preserved, entry)) + "\n"
+    _write_crontab(contents, runner)
+    return Path("user crontab")
+
+
+def _cron_schedule_status(
+    database_path: str | Path,
+    *,
+    runner: Callable[..., subprocess.CompletedProcess[str]],
+) -> tuple[Path, bool, bool, int | None]:
+    marker, backup_directory = _cron_identity(database_path)
+    current = _read_crontab(runner)
+    installed = any(marker in line for line in current.splitlines())
+    if not installed:
+        return Path("user crontab"), False, False, None
+    result_file = backup_directory / "last-exit-code"
+    if result_file.is_symlink():
+        raise SchedulerError(f"Refusing to read a symlinked schedule result: {result_file}")
+    try:
+        raw_code = result_file.read_text(encoding="ascii").strip()
+    except FileNotFoundError:
+        last_exit_code = None
+    except (OSError, UnicodeError) as error:
+        raise SchedulerError(f"Could not read scheduled backup result: {error}") from error
+    else:
+        try:
+            last_exit_code = int(raw_code)
+        except ValueError as error:
+            raise SchedulerError(
+                f"Scheduled backup result is not an integer: {result_file}"
+            ) from error
+    return Path("user crontab"), True, True, last_exit_code
+
+
+def _uninstall_cron_schedule(
+    database_path: str | Path,
+    *,
+    runner: Callable[..., subprocess.CompletedProcess[str]],
+) -> tuple[Path, bool]:
+    marker, _ = _cron_identity(database_path)
+    current = _read_crontab(runner)
+    preserved = [
+        line for line in current.splitlines() if marker not in line
+    ]
+    if len(preserved) == len(current.splitlines()):
+        return Path("user crontab"), False
+    contents = "\n".join(preserved)
+    _write_crontab(f"{contents}\n" if contents else "", runner)
+    return Path("user crontab"), True
 
 
 def _schedule_identity(
@@ -108,6 +251,17 @@ def install_backup_schedule(
     uid: int | None = None,
     runner: Callable[..., subprocess.CompletedProcess[str]] = subprocess.run,
 ) -> Path:
+    if sys.platform == "linux":
+        return _install_cron_schedule(
+            database_path,
+            python_executable=python_executable,
+            keep=keep,
+            runner=runner,
+        )
+    if sys.platform == "win32":
+        raise SchedulerError(
+            "Automatic scheduling is not yet supported on Windows; use Task Scheduler."
+        )
     database = Path(database_path).expanduser().resolve()
     if keep < 1:
         raise ValueError("Backup retention count must be at least 1.")
@@ -193,6 +347,12 @@ def backup_schedule_status(
     uid: int | None = None,
     runner: Callable[..., subprocess.CompletedProcess[str]] = subprocess.run,
 ) -> tuple[Path, bool, bool, int | None]:
+    if sys.platform == "linux":
+        return _cron_schedule_status(database_path, runner=runner)
+    if sys.platform == "win32":
+        raise SchedulerError(
+            "Automatic scheduling is not yet supported on Windows; use Task Scheduler."
+        )
     database = Path(database_path).expanduser().resolve()
     label, agent_path, _ = _schedule_identity(database, home)
     if not agent_path.exists():
@@ -222,6 +382,12 @@ def uninstall_backup_schedule(
     uid: int | None = None,
     runner: Callable[..., subprocess.CompletedProcess[str]] = subprocess.run,
 ) -> tuple[Path, bool]:
+    if sys.platform == "linux":
+        return _uninstall_cron_schedule(database_path, runner=runner)
+    if sys.platform == "win32":
+        raise SchedulerError(
+            "Automatic scheduling is not yet supported on Windows; use Task Scheduler."
+        )
     agent_path, installed, loaded, _ = backup_schedule_status(
         database_path, home=home, uid=uid, runner=runner
     )

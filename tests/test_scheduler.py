@@ -13,6 +13,23 @@ from aether_engine.scheduler import (
 )
 
 
+class FakeCrontab:
+    def __init__(self) -> None:
+        self.contents = ""
+        self.commands: list[list[str]] = []
+
+    def __call__(
+        self, command: list[str], **kwargs
+    ) -> subprocess.CompletedProcess[str]:
+        self.commands.append(command)
+        if command == ["crontab", "-l"]:
+            if self.contents:
+                return subprocess.CompletedProcess(command, 0, self.contents, "")
+            return subprocess.CompletedProcess(command, 1, "", "no crontab for test")
+        self.contents = kwargs["input"]
+        return subprocess.CompletedProcess(command, 0, "", "")
+
+
 class FakeLaunchctl:
     def __init__(self) -> None:
         self.loaded = False
@@ -197,3 +214,50 @@ def test_status_cli_reports_last_run_failure(tmp_path: Path, monkeypatch, capsys
     assert "schedule is active" in output.out
     assert "FAILED (exit code 7)" in output.err
     assert "launchd.stderr.log" in output.err
+
+
+def test_install_status_and_uninstall_linux_cron_schedule(
+    tmp_path: Path, monkeypatch
+) -> None:
+    from aether_engine import scheduler
+
+    monkeypatch.setattr(scheduler.sys, "platform", "linux")
+    runner = FakeCrontab()
+    runner.contents = "# preserve this user job\n"
+    database = tmp_path / "project" / "data.sqlite3"
+
+    schedule_path = install_backup_schedule(
+        database,
+        python_executable="/project/.venv/bin/python",
+        keep=9,
+        runner=runner,
+    )
+    assert schedule_path == Path("user crontab")
+    assert "0 9 * * *" in runner.contents
+    assert "--keep 9" in runner.contents
+    assert "AETHER_ENGINE_BACKUP:" in runner.contents
+    assert str(database.resolve()) in runner.contents
+    assert "# preserve this user job" in runner.contents
+
+    install_backup_schedule(database, keep=12, runner=runner)
+    assert runner.contents.count("AETHER_ENGINE_BACKUP:") == 1
+    assert "--keep 12" in runner.contents
+
+    _, installed, loaded, last_exit_code = backup_schedule_status(
+        database, runner=runner
+    )
+    assert installed and loaded
+    assert last_exit_code is None
+
+    result_file = database.parent / ".aether-backups" / "last-exit-code"
+    result_file.write_text("0\n", encoding="ascii")
+    _, installed, loaded, last_exit_code = backup_schedule_status(
+        database, runner=runner
+    )
+    assert installed and loaded
+    assert last_exit_code == 0
+
+    removed_path, removed = uninstall_backup_schedule(database, runner=runner)
+    assert removed_path == Path("user crontab")
+    assert removed
+    assert "AETHER_ENGINE_BACKUP:" not in runner.contents

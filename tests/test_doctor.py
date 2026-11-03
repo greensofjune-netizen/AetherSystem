@@ -1,4 +1,7 @@
+import os
 from pathlib import Path
+
+import pytest
 
 from aether_engine import engine_doctor as doctor_module
 from aether_engine.backups import write_backup
@@ -75,3 +78,15 @@ def test_doctor_reports_unconfigured_backup_and_schedule_as_warnings(
     assert results[1].status == "WARN"
     assert results[2].status == "WARN"
     assert results[3].status == "WARN"
+
+
+@pytest.mark.skipif(os.name == "nt", reason="POSIX file modes are not Windows ACLs")
+def test_doctor_reports_insecure_database_permissions(tmp_path: Path) -> None:
+    database = tmp_path / "insecure.sqlite3"
+    AetherStore(database)
+    database.chmod(0o644)
+
+    result = AetherEngineDoctor(database).diagnose_database()
+
+    assert result.status == "FAIL"
+    assert "restricted to the current user" in result.detail

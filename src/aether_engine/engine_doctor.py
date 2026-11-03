@@ -8,7 +8,7 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from .backups import _BACKUP_NAME
-from .database import AetherStore
+from .database import AetherStore, database_permission_issues
 from .scheduler import SchedulerError, backup_schedule_status
 
 
@@ -64,6 +64,19 @@ class AetherEngineDoctor:
                 ).fetchone()[0]
         except sqlite3.Error as error:
             return Diagnostic("Database", "FAIL", str(error))
+        try:
+            insecure_files = database_permission_issues(self.db_path)
+        except OSError as error:
+            return Diagnostic(
+                "Database", "FAIL", f"Could not verify database permissions: {error}"
+            )
+        if insecure_files:
+            return Diagnostic(
+                "Database",
+                "FAIL",
+                "Database files must be restricted to the current user: "
+                + ", ".join(insecure_files),
+            )
         return Diagnostic(
             "Database",
             "OK",
@@ -110,7 +123,8 @@ class AetherEngineDoctor:
         protected_files = [
             path
             for path in entries
-            if path.name in ("launchd.stdout.log", "launchd.stderr.log")
+            if path.name
+            in ("launchd.stdout.log", "launchd.stderr.log", "last-exit-code")
             or _BACKUP_NAME.fullmatch(path.name)
         ]
         unsafe_paths: list[str] = []
@@ -142,6 +156,13 @@ class AetherEngineDoctor:
         return [backup_result, permission_result]
 
     def diagnose_schedule(self) -> Diagnostic:
+        if sys.platform == "win32":
+            return Diagnostic(
+                "Backup schedule",
+                "WARN",
+                "Automatic schedule management is not available; configure "
+                "Windows Task Scheduler manually.",
+            )
         try:
             _, installed, loaded, last_exit_code = backup_schedule_status(
                 self.db_path

@@ -1,11 +1,89 @@
 from __future__ import annotations
 
+import os
 import sqlite3
+import subprocess
 from contextlib import contextmanager
 from dataclasses import dataclass
 from datetime import date, datetime, timezone
 from pathlib import Path
 from typing import Generator
+
+from .sanitizer import sanitize_text
+
+_SCHEMA_VERSION = 2
+
+
+def _windows_principal() -> str:
+    username = os.environ.get("USERNAME")
+    if not username:
+        raise PermissionError("Could not determine the current Windows user.")
+    domain = os.environ.get("USERDOMAIN")
+    return f"{domain}\\{username}" if domain else username
+
+
+def _secure_windows_file(path: Path) -> None:
+    principal = _windows_principal()
+    try:
+        result = subprocess.run(
+            [
+                "icacls",
+                str(path),
+                "/reset",
+                "/inheritance:r",
+                "/grant:r",
+                f"{principal}:(F)",
+            ],
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+    except OSError as error:
+        raise PermissionError(f"Could not secure database file {path}: {error}") from error
+    if result.returncode != 0:
+        detail = result.stderr.strip() or result.stdout.strip()
+        raise PermissionError(f"Could not secure database file {path}: {detail}")
+
+
+def database_permission_issues(database_path: str | Path) -> list[str]:
+    path = Path(database_path)
+    files = (
+        path,
+        Path(f"{path}-wal"),
+        Path(f"{path}-shm"),
+    )
+    issues: list[str] = []
+    if os.name == "nt":
+        principal = _windows_principal().casefold()
+        for file_path in files:
+            if not file_path.is_file():
+                continue
+            try:
+                result = subprocess.run(
+                    ["icacls", str(file_path)],
+                    capture_output=True,
+                    text=True,
+                    check=False,
+                )
+            except OSError as error:
+                issues.append(f"{file_path.name} ACL could not be checked: {error}")
+                continue
+            entries = [
+                line.strip()
+                for line in result.stdout.splitlines()[1:]
+                if line.strip()
+            ]
+            if result.returncode != 0 or not entries or any(
+                not entry.casefold().startswith(f"{principal}:")
+                for entry in entries
+            ):
+                issues.append(f"{file_path.name} ACL is not restricted to {principal}")
+    else:
+        for file_path in files:
+            if file_path.is_file() and file_path.stat().st_mode & 0o077:
+                mode = file_path.stat().st_mode & 0o777
+                issues.append(f"{file_path.name} mode is {mode:04o}")
+    return issues
 
 
 @dataclass(frozen=True)
@@ -41,67 +119,107 @@ class AetherStore:
     def __init__(self, database_path: str | Path) -> None:
         self.database_path = Path(database_path)
         self.database_path.parent.mkdir(parents=True, exist_ok=True)
+        if os.name != "nt":
+            try:
+                descriptor = os.open(
+                    self.database_path,
+                    os.O_CREAT | os.O_EXCL | os.O_WRONLY,
+                    0o600,
+                )
+            except FileExistsError:
+                pass
+            else:
+                os.close(descriptor)
+        self._secure_database_files()
         self._initialize()
+
+    def _secure_database_files(self) -> None:
+        for path in (
+            self.database_path,
+            Path(f"{self.database_path}-wal"),
+            Path(f"{self.database_path}-shm"),
+        ):
+            if path.is_symlink():
+                raise ValueError(f"Refusing to use a symlinked database file: {path}")
+            if path.is_file():
+                if os.name == "nt":
+                    _secure_windows_file(path)
+                else:
+                    path.chmod(0o600)
 
     @contextmanager
     def _connect(self) -> Generator[sqlite3.Connection, None, None]:
         connection = sqlite3.connect(self.database_path)
         connection.row_factory = sqlite3.Row
         try:
+            self._secure_database_files()
             with connection:
                 yield connection
         finally:
             connection.close()
+            self._secure_database_files()
 
     def _initialize(self) -> None:
         with self._connect() as connection:
+            connection.execute("BEGIN IMMEDIATE")
+            version = connection.execute("PRAGMA user_version").fetchone()[0]
+            if version > _SCHEMA_VERSION:
+                raise ValueError(
+                    f"Database schema version {version} is newer than supported "
+                    f"version {_SCHEMA_VERSION}."
+                )
+            if version < 1:
+                self._migrate_to_version_1(connection)
+                connection.execute("PRAGMA user_version = 1")
+                version = 1
+            if version < 2:
+                self._migrate_to_version_2(connection)
+                connection.execute("PRAGMA user_version = 2")
+
+    @staticmethod
+    def _migrate_to_version_1(connection: sqlite3.Connection) -> None:
+        connection.execute(
+            """
+            CREATE TABLE IF NOT EXISTS events (
+                id INTEGER PRIMARY KEY,
+                topic TEXT NOT NULL,
+                message TEXT NOT NULL,
+                created_at TEXT NOT NULL
+            )
+            """
+        )
+        connection.execute(
+            """
+            CREATE TABLE IF NOT EXISTS tasks (
+                id INTEGER PRIMARY KEY,
+                title TEXT NOT NULL,
+                description TEXT NOT NULL DEFAULT '',
+                status TEXT NOT NULL CHECK (status IN ('pending', 'done')),
+                created_at TEXT NOT NULL,
+                updated_at TEXT NOT NULL
+            )
+            """
+        )
+
+    @staticmethod
+    def _migrate_to_version_2(connection: sqlite3.Connection) -> None:
+        task_columns = {
+            row["name"] for row in connection.execute("PRAGMA table_info(tasks)")
+        }
+        if "priority" not in task_columns:
             connection.execute(
                 """
-                CREATE TABLE IF NOT EXISTS events (
-                    id INTEGER PRIMARY KEY,
-                    topic TEXT NOT NULL,
-                    message TEXT NOT NULL,
-                    created_at TEXT NOT NULL
-                )
+                ALTER TABLE tasks
+                ADD COLUMN priority TEXT NOT NULL DEFAULT 'normal'
+                CHECK (priority IN ('low', 'normal', 'high'))
                 """
             )
-            connection.execute(
-                """
-                CREATE TABLE IF NOT EXISTS tasks (
-                    id INTEGER PRIMARY KEY,
-                    title TEXT NOT NULL,
-                    description TEXT NOT NULL DEFAULT '',
-                    status TEXT NOT NULL CHECK (status IN ('pending', 'done')),
-                    priority TEXT NOT NULL DEFAULT 'normal'
-                        CHECK (priority IN ('low', 'normal', 'high')),
-                    due_date TEXT,
-                    created_at TEXT NOT NULL,
-                    updated_at TEXT NOT NULL
-                )
-                """
-            )
-            task_columns = {
-                row["name"]
-                for row in connection.execute("PRAGMA table_info(tasks)")
-            }
-            if "priority" not in task_columns:
-                connection.execute(
-                    """
-                    ALTER TABLE tasks
-                    ADD COLUMN priority TEXT NOT NULL DEFAULT 'normal'
-                    CHECK (priority IN ('low', 'normal', 'high'))
-                    """
-                )
-            if "due_date" not in task_columns:
-                connection.execute("ALTER TABLE tasks ADD COLUMN due_date TEXT")
+        if "due_date" not in task_columns:
+            connection.execute("ALTER TABLE tasks ADD COLUMN due_date TEXT")
 
     def add_event(self, topic: str, message: str) -> Event:
-        topic = topic.strip()
-        message = message.strip()
-        if not topic:
-            raise ValueError("Event topic cannot be empty.")
-        if not message:
-            raise ValueError("Event message cannot be empty.")
+        topic = sanitize_text(topic, field_name="Event topic")
+        message = sanitize_text(message, field_name="Event message")
 
         created_at = datetime.now(timezone.utc).isoformat()
         with self._connect() as connection:
@@ -167,9 +285,10 @@ class AetherStore:
         priority: str = "normal",
         due_date: str | None = None,
     ) -> Task:
-        title = title.strip()
-        if not title:
-            raise ValueError("Task title cannot be empty.")
+        title = sanitize_text(title, field_name="Task title")
+        description = sanitize_text(
+            description, field_name="Task description", allow_empty=True
+        )
         if priority not in ("low", "normal", "high"):
             raise ValueError("Task priority must be 'low', 'normal', or 'high'.")
         if due_date is not None:
@@ -188,7 +307,7 @@ class AetherStore:
                     (title, description, status, priority, due_date, created_at, updated_at)
                 VALUES (?, ?, 'pending', ?, ?, ?, ?)
                 """,
-                (title, description.strip(), priority, due_date, now, now),
+                (title, description, priority, due_date, now, now),
             )
             row = connection.execute(
                 "SELECT * FROM tasks WHERE id = ?", (cursor.lastrowid,)
@@ -272,9 +391,11 @@ class AetherStore:
         if clear_due_date and due_date is not None:
             raise ValueError("Cannot set and clear the due date at the same time.")
         if title is not None:
-            title = title.strip()
-            if not title:
-                raise ValueError("Task title cannot be empty.")
+            title = sanitize_text(title, field_name="Task title")
+        if description is not None:
+            description = sanitize_text(
+                description, field_name="Task description", allow_empty=True
+            )
         if priority is not None and priority not in ("low", "normal", "high"):
             raise ValueError("Task priority must be 'low', 'normal', or 'high'.")
         if due_date is not None:
@@ -289,7 +410,7 @@ class AetherStore:
         if title is not None:
             updates.append(("title", title))
         if description is not None:
-            updates.append(("description", description.strip()))
+            updates.append(("description", description))
         if priority is not None:
             updates.append(("priority", priority))
         if due_date is not None or clear_due_date:
@@ -469,8 +590,14 @@ class AetherStore:
                     raise ValueError(
                         f"Backup task at index {index} has an invalid {name}."
                     )
-            if not task["title"].strip():
-                raise ValueError(f"Backup task at index {index} has an empty title.")
+            task["title"] = sanitize_text(
+                task["title"], field_name=f"Backup task at index {index} title"
+            )
+            task["description"] = sanitize_text(
+                task["description"],
+                field_name=f"Backup task at index {index} description",
+                allow_empty=True,
+            )
             if task["status"] not in ("pending", "done"):
                 raise ValueError(f"Backup task at index {index} has an invalid status.")
             if task["priority"] not in ("low", "normal", "high"):
@@ -518,8 +645,12 @@ class AetherStore:
                     raise ValueError(
                         f"Backup event at index {index} has an invalid {name}."
                     )
-            if not event["topic"].strip() or not event["message"].strip():
-                raise ValueError(f"Backup event at index {index} has empty text.")
+            event["topic"] = sanitize_text(
+                event["topic"], field_name=f"Backup event at index {index} topic"
+            )
+            event["message"] = sanitize_text(
+                event["message"], field_name=f"Backup event at index {index} message"
+            )
             try:
                 datetime.fromisoformat(event["created_at"])
             except ValueError as error:

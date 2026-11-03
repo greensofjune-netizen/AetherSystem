@@ -166,7 +166,7 @@ def _build_parser() -> argparse.ArgumentParser:
     )
     backup_commands = backup_parser.add_subparsers(dest="backup_action")
     schedule_parser = backup_commands.add_parser(
-        "schedule", help="manage the macOS daily backup schedule"
+        "schedule", help="manage the daily backup schedule"
     )
     schedule_commands = schedule_parser.add_subparsers(
         dest="schedule_action", required=True
@@ -347,19 +347,19 @@ def main(argv: Sequence[str] | None = None) -> int:
             elif args.action == "list":
                 _print_tasks(store, args.status, args.search)
             elif args.action == "complete":
-                task = store.complete_task(args.task_id)
-                if task is None:
+                completed_task = store.complete_task(args.task_id)
+                if completed_task is None:
                     print(f"Task #{args.task_id} was not found.", file=sys.stderr)
                     return 1
-                print(f"Completed task #{task.id}: {task.title}")
+                print(f"Completed task #{completed_task.id}: {completed_task.title}")
             elif args.action == "reopen":
-                task = store.reopen_task(args.task_id)
-                if task is None:
+                reopened_task = store.reopen_task(args.task_id)
+                if reopened_task is None:
                     print(f"Task #{args.task_id} was not found.", file=sys.stderr)
                     return 1
-                print(f"Reopened task #{task.id}: {task.title}")
+                print(f"Reopened task #{reopened_task.id}: {reopened_task.title}")
             else:
-                task = store.update_task(
+                updated_task = store.update_task(
                     args.task_id,
                     title=args.title,
                     description=args.description,
@@ -367,10 +367,10 @@ def main(argv: Sequence[str] | None = None) -> int:
                     due_date=args.due,
                     clear_due_date=args.clear_due,
                 )
-                if task is None:
+                if updated_task is None:
                     print(f"Task #{args.task_id} was not found.", file=sys.stderr)
                     return 1
-                print(f"Updated task #{task.id}: {task.title}")
+                print(f"Updated task #{updated_task.id}: {updated_task.title}")
         elif args.command == "status":
             _print_dashboard(store)
         elif args.command == "export":
@@ -443,7 +443,7 @@ def main(argv: Sequence[str] | None = None) -> int:
                     if last_exit_code is None:
                         print("Last run result is not available yet.")
                     elif last_exit_code == 0:
-                        print("Last LaunchAgent run succeeded (exit code 0).")
+                        print("Last scheduled backup succeeded (exit code 0).")
                     else:
                         error_log = (
                             store.database_path.parent
@@ -451,7 +451,7 @@ def main(argv: Sequence[str] | None = None) -> int:
                             / "launchd.stderr.log"
                         )
                         print(
-                            f"Last LaunchAgent run FAILED (exit code "
+                            f"Last scheduled backup FAILED (exit code "
                             f"{last_exit_code}); see {error_log}.",
                             file=sys.stderr,
                         )
