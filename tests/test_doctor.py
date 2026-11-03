@@ -90,3 +90,22 @@ def test_doctor_reports_insecure_database_permissions(tmp_path: Path) -> None:
 
     assert result.status == "FAIL"
     assert "restricted to the current user" in result.detail
+
+
+@pytest.mark.skipif(os.name == "nt", reason="symlink permissions vary on Windows")
+def test_doctor_flags_symlinked_backup_directory(tmp_path: Path) -> None:
+    database = tmp_path / "project.sqlite3"
+    AetherStore(database)
+    target_directory = tmp_path / "other-backups"
+    target_directory.mkdir()
+    backup_link = tmp_path / ".aether-backups"
+    backup_link.symlink_to(target_directory, target_is_directory=True)
+
+    backup_results = AetherEngineDoctor(database).diagnose_backups()
+
+    assert [result.status for result in backup_results] == ["FAIL", "FAIL"]
+    assert "must not be a symlink" in backup_results[0].detail
+
+    custom_doctor = AetherEngineDoctor(database, backup_dir=backup_link)
+    custom_results = custom_doctor.diagnose_backups()
+    assert [result.status for result in custom_results] == ["FAIL", "FAIL"]

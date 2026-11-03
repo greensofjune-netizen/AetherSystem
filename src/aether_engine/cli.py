@@ -5,6 +5,7 @@ import json
 import os
 import sqlite3
 import sys
+import tempfile
 from collections.abc import Sequence
 from datetime import date, datetime, timezone
 from pathlib import Path
@@ -191,6 +192,28 @@ def _export_payload(store: AetherStore) -> dict[str, object]:
         "exported_at": datetime.now(timezone.utc).isoformat(),
         **store.export_data(),
     }
+
+
+def _write_export_file(path: Path, serialized: str, *, force: bool) -> None:
+    if path.is_symlink():
+        raise ValueError(f"Export output cannot be a symlink: {path}")
+    descriptor, temporary_name = tempfile.mkstemp(
+        prefix=f".{path.name}.", suffix=".tmp", dir=path.parent
+    )
+    temporary_path = Path(temporary_name)
+    try:
+        with os.fdopen(descriptor, "w", encoding="utf-8") as output_file:
+            output_file.write(serialized)
+            output_file.flush()
+            os.fsync(output_file.fileno())
+        if os.name != "nt":
+            temporary_path.chmod(0o600)
+        if force:
+            os.replace(temporary_path, path)
+        else:
+            os.link(temporary_path, path)
+    finally:
+        temporary_path.unlink(missing_ok=True)
 
 
 def _dashboard_color_enabled() -> bool:
@@ -384,9 +407,7 @@ def main(argv: Sequence[str] | None = None) -> int:
                 output_path = Path(args.output)
                 if output_path.resolve() == store.database_path.resolve():
                     raise ValueError("Export output cannot be the database file.")
-                mode = "w" if args.force else "x"
-                with output_path.open(mode, encoding="utf-8") as output_file:
-                    output_file.write(serialized)
+                _write_export_file(output_path, serialized, force=args.force)
                 print(f"Exported project data to {output_path}.")
         elif args.command == "restore":
             backup_path = Path(args.backup)

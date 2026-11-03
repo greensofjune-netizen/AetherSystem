@@ -15,6 +15,8 @@ On Windows, activate with `.venv\Scripts\activate` instead.
 
 The editable install exposes the `aether-engine` command from this checkout. After code changes, rerun `python -m pytest`; to verify the installed command, run `aether-engine --help`.
 
+To copy the current engine source, tests, and project configuration into another directory without overwriting existing files, run `python seed_project.py --target ../new-aether-project`.
+
 ## Usage
 
 ```bash
@@ -66,6 +68,8 @@ On macOS, `aether-engine backup schedule install` installs a per-project user La
 `aether-engine doctor` performs read-only checks of the selected database and its OS-appropriate permissions, newest backup validity, backup permissions, and supported scheduled-backup status/last exit code. Missing backups or an uninstalled schedule are reported as warnings; detected corruption, insecure permissions, or a failed installed schedule make the command exit nonzero. On Windows, manual Task Scheduler setup is reported as a warning because the built-in schedule management commands are unavailable. The doctor does not format or modify project source files.
 
 SQLite schema changes are applied by numbered migrations recorded in `PRAGMA user_version`. The engine upgrades older databases transactionally and refuses to open databases created by a newer unsupported schema version.
+
+The optional experimental supervisor can be started with `python -m aether_engine.supervisor` inside the project virtual environment. It computes resonance over in-memory sample telemetry only; it is not connected to the project database, does not install itself as a background service, and does not monitor real system telemetry. It writes `aether_runtime.log` in the current directory, checks Ruff lint at startup and then every five minutes, and handles Ctrl-C/SIGTERM for graceful shutdown. Its maintenance check is read-only and never auto-fixes source files.
 
 For an optional off-machine copy, `backup_replication.py` makes a real versioned JSON snapshot from an existing Aether database, then can send that snapshot using your configured SSH agent/config. Run from the project directory:
 

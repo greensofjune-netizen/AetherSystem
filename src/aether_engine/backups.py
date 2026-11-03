@@ -14,6 +14,8 @@ _BACKUP_NAME = re.compile(r"aether-backup-\d{8}T\d{6}\.\d{6}Z\.json")
 
 
 def secure_backup_directory(directory: Path) -> None:
+    if directory.is_symlink():
+        raise ValueError(f"Refusing to use a symlink as the backup directory: {directory}")
     directory.mkdir(parents=True, exist_ok=True, mode=0o700)
     directory.chmod(0o700)
     for path in directory.iterdir():

@@ -28,7 +28,7 @@ class AetherEngineDoctor:
     ) -> None:
         self.db_path = Path(db_path).expanduser().resolve()
         self.backup_dir = (
-            Path(backup_dir).expanduser().resolve()
+            Path(backup_dir).expanduser().absolute()
             if backup_dir is not None
             else self.db_path.parent / ".aether-backups"
         )
@@ -84,6 +84,19 @@ class AetherEngineDoctor:
         )
 
     def diagnose_backups(self) -> list[Diagnostic]:
+        if self.backup_dir.is_symlink():
+            return [
+                Diagnostic(
+                    "Backups",
+                    "FAIL",
+                    f"Backup directory must not be a symlink: {self.backup_dir}",
+                ),
+                Diagnostic(
+                    "Backup permissions",
+                    "FAIL",
+                    "Cannot verify permissions through a symlinked backup directory.",
+                ),
+            ]
         if not self.backup_dir.is_dir():
             return [
                 Diagnostic("Backups", "WARN", f"Directory not found: {self.backup_dir}"),

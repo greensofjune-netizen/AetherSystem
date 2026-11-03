@@ -1,6 +1,7 @@
 import getpass
 import json
 import os
+import shlex
 import shutil
 import socket
 import sqlite3
@@ -126,6 +127,38 @@ def test_remote_transfer_failure_is_reported(tmp_path: Path, capsys) -> None:
     assert "connection unavailable" in capsys.readouterr().err
 
 
+def test_remote_destination_shell_metacharacters_are_quoted(
+    tmp_path: Path,
+) -> None:
+    commands: list[list[str]] = []
+
+    def fake_run(command: list[str], **_kwargs) -> subprocess.CompletedProcess[str]:
+        commands.append(command)
+        return subprocess.CompletedProcess(command, 0, "", "")
+
+    database = tmp_path / "project.sqlite3"
+    AetherStore(database)
+    remote_dir = "/srv/backup; touch /tmp/unexpected"
+    replicator = BackupReplicator(
+        database,
+        "backup-user",
+        "backup.example.net",
+        remote_dir,
+        backup_dir=tmp_path / "local",
+        runner=fake_run,
+    )
+    backup = replicator.generate_local_backup()
+
+    assert replicator.replicate_off_machine(backup)
+    expected_path = f"{remote_dir}/{backup.name}"
+    assert commands[0][-1] == (
+        f"backup-user@backup.example.net:{shlex.quote(expected_path)}"
+    )
+    assert shlex.split(commands[0][-1]) == [
+        f"backup-user@backup.example.net:{expected_path}"
+    ]
+
+
 def test_remote_options_are_validated_and_local_mode_never_transfers(
     tmp_path: Path, capsys
 ) -> None:
@@ -144,6 +177,13 @@ def test_remote_options_are_validated_and_local_mode_never_transfers(
             "user",
             "host.example",
             "~/backup",
+        )
+    with pytest.raises(ValueError, match="absolute POSIX path"):
+        BackupReplicator(
+            tmp_path / "db.sqlite3",
+            "user",
+            "host.example",
+            "/backup/\0invalid",
         )
 
     database = tmp_path / "project.sqlite3"

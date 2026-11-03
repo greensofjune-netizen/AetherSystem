@@ -1,68 +1,55 @@
-import os
+from __future__ import annotations
+
+import argparse
+import shutil
+from pathlib import Path
 
 
-def write_if_missing(path, content):
-    if os.path.exists(path):
-        print(f"  [=] Preserved existing: {path}")
-        return
-    with open(path, "w", encoding="utf-8") as file:
-        file.write(content)
-    print(f"  [+] Created: {path}")
+def seed_project(target: Path | str = ".") -> None:
+    source_root = Path(__file__).resolve().parent
+    target_root = Path(target).expanduser().resolve()
+    files = [
+        Path(".gitignore"),
+        Path("README.md"),
+        Path("pyproject.toml"),
+        Path("seed_project.py"),
+        Path("backup_replication.py"),
+        *sorted((source_root / "src" / "aether_engine").glob("*.py")),
+        *sorted((source_root / "tests").glob("test_*.py")),
+        *sorted((source_root / ".github" / "workflows").glob("*.yml")),
+    ]
+
+    print(f"Seeding Aether Engine project at {target_root}")
+    for source in files:
+        relative = (
+            source.relative_to(source_root)
+            if source.is_absolute()
+            else source
+        )
+        destination = target_root / relative
+        if destination.exists():
+            print(f"  [=] Preserved existing: {relative}")
+            continue
+        destination.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copy2(source_root / relative, destination)
+        print(f"  [+] Created: {relative}")
+    print("Aether Engine project seed complete.")
 
 
-def build_root_and_tree():
-    print("\n--- Seeding Project Skeleton Layout ---")
-    
-    # Create the folder layout
-    for folder in ["src/aether_engine", "tests"]:
-        os.makedirs(folder, exist_ok=True)
-
-    # 1. pyproject.toml package configuration
-    write_if_missing("pyproject.toml", """[build-system]
-requires = ["setuptools>=61.0"]
-build-backend = "setuptools.build_meta"
-
-[project]
-name = "aether-engine"
-version = "0.1.0"
-description = "Aether Engine tracking array."
-readme = "README.md"
-requires-python = ">=3.11"
-dependencies = ["pytest>=7.0.0"]
-
-[project.scripts]
-aether-engine = "aether_engine.cli:main"
-""")
-
-    # 2. __init__.py
-    write_if_missing("src/aether_engine/__init__.py", '__version__ = "0.1.0"\n')
-
-    # 3. historian.py
-    write_if_missing("src/aether_engine/historian.py", """import time, math, uuid
-class CoPilotHistorian:
-    def __init__(self):
-        self.registry = {}
-    def drop_anchor(self, topic):
-        aid = str(uuid.uuid4())[:8]
-        self.registry[aid] = topic
-        return aid
-""")
-
-    # 4. cli.py
-    write_if_missing("src/aether_engine/cli.py", """def main():
-    print("\\n📡 AETHER ENGINE CLI ACTIVE")
-""")
-
-    # 5. README.md
-    write_if_missing("README.md", "# Aether Engine\n")
-
-    # 6. Keep the local project database out of version control
-    write_if_missing(
-        ".gitignore",
-        ".aether-engine.sqlite3*\n.aether-backups/\n.venv/\n__pycache__/\n.pytest_cache/\n*.egg-info/\n",
+def main(argv: list[str] | None = None) -> int:
+    parser = argparse.ArgumentParser(
+        description="Seed a project with the current Aether Engine source and tests."
     )
+    parser.add_argument(
+        "--target",
+        type=Path,
+        default=Path.cwd(),
+        help="destination directory (default: current directory)",
+    )
+    args = parser.parse_args(argv)
+    seed_project(args.target)
+    return 0
 
-    print("\n[✔] PROJECT SKELETON READY")
 
 if __name__ == "__main__":
-    build_root_and_tree()
+    raise SystemExit(main())

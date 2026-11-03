@@ -413,6 +413,8 @@ def test_export_writes_json_and_refuses_to_overwrite(
 
     assert main(["--database", database, "export", str(output)]) == 0
     assert "Exported project data" in capsys.readouterr().out
+    if os.name != "nt":
+        assert output.stat().st_mode & 0o777 == 0o600
     payload = json.loads(output.read_text(encoding="utf-8"))
     assert payload["schema_version"] == 1
     assert payload["tasks"][0]["title"] == "Export me"
@@ -427,6 +429,49 @@ def test_export_writes_json_and_refuses_to_overwrite(
     assert json.loads(output.read_text(encoding="utf-8"))["tasks"][0]["title"] == (
         "Export me"
     )
+    if os.name != "nt":
+        assert output.stat().st_mode & 0o777 == 0o600
+
+
+@pytest.mark.skipif(os.name == "nt", reason="symlink permissions vary on Windows")
+def test_export_refuses_symlink_destination(tmp_path: Path, capsys) -> None:
+    database = tmp_path / "aether.sqlite3"
+    target = tmp_path / "sensitive.txt"
+    target.write_text("unchanged", encoding="utf-8")
+    destination = tmp_path / "export.json"
+    destination.symlink_to(target)
+
+    assert main(
+        [
+            "--database",
+            str(database),
+            "export",
+            str(destination),
+            "--force",
+        ]
+    ) == 1
+    assert "cannot be a symlink" in capsys.readouterr().err
+    assert target.read_text(encoding="utf-8") == "unchanged"
+
+
+@pytest.mark.skipif(os.name == "nt", reason="symlink permissions vary on Windows")
+def test_backup_refuses_symlink_directory_without_changing_target(
+    tmp_path: Path,
+) -> None:
+    from aether_engine.backups import write_backup
+
+    database = tmp_path / "project.sqlite3"
+    store = AetherStore(database)
+    target_directory = tmp_path / "shared"
+    target_directory.mkdir()
+    target_directory.chmod(0o755)
+    backup_link = tmp_path / ".aether-backups"
+    backup_link.symlink_to(target_directory, target_is_directory=True)
+
+    with pytest.raises(ValueError, match="symlink as the backup directory"):
+        write_backup(store, backup_link)
+
+    assert target_directory.stat().st_mode & 0o777 == 0o755
 
 
 def test_export_stdout_and_database_path_protection(

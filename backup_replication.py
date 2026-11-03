@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import argparse
 import re
+import shlex
 import sqlite3
 import subprocess
 import sys
@@ -43,6 +44,7 @@ class BackupReplicator:
             not remote_dir.startswith("/")
             or "\n" in remote_dir
             or "\r" in remote_dir
+            or "\0" in remote_dir
             or ":" in remote_dir
         ):
             raise ValueError("Remote directory must be an absolute POSIX path.")
@@ -92,9 +94,9 @@ class BackupReplicator:
                 "Remote user, host, and directory are required for replication."
             )
 
+        remote_path = f"{self.remote_dir.rstrip('/')}/{backup_file.name}"
         destination = (
-            f"{self.remote_user}@{self.remote_host}:"
-            f"{self.remote_dir.rstrip('/')}/{backup_file.name}"
+            f"{self.remote_user}@{self.remote_host}:{shlex.quote(remote_path)}"
         )
         command = ["scp", "-p", "-o", "BatchMode=yes"]
         if self.identity_file is not None:
