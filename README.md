@@ -17,6 +17,8 @@ The editable install exposes the `aether-engine` command from this checkout. Aft
 
 To copy the current engine source, tests, and project configuration into another directory without overwriting existing files, run `python seed_project.py --target ../new-aether-project`.
 
+The optional `aether_engine.ai_bridge.AetherLunaBridge` runs in offline simulation mode by default; try it with `python -m aether_engine.ai_bridge`. It does not send requests to OpenAI, and its default `gpt-6-luna` identifier is a caller-provided label, not a verified available model. Live provider integration requires an explicitly supplied transport callable and API key; no OpenAI SDK or live provider adapter is included.
+
 ## Usage
 
 ```bash

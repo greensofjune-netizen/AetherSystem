@@ -5,3 +5,4 @@ backups/
 __pycache__/
 .pytest_cache/
 *.egg-info/
+aether_runtime.log
