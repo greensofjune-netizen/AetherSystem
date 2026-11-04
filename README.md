@@ -7,7 +7,7 @@ A local-first command-line tool for tracking project tasks and recording a searc
 ```bash
 python3 -m venv .venv
 source .venv/bin/activate
-python -m pip install -e ".[dev]"
+python -m pip install -e ".[dev,api]"
 python -m pytest
 ```
 
@@ -24,6 +24,8 @@ To copy the current engine source, tests, and project configuration into another
 The optional `aether_engine.ai_bridge.AetherLunaBridge` runs in offline simulation mode by default; try it with `python -m aether_engine.ai_bridge`. It does not send requests to OpenAI, and its default `gpt-6-luna` identifier is a caller-provided label, not a verified available model. Live provider integration requires an explicitly supplied transport callable and API key; no OpenAI SDK or live provider adapter is included.
 
 `aether_engine.ai_bridge.LocalAirGappedEngine` can run text inference with a local Qwen 2.5 Coder GGUF file. Install the optional backend with `python -m pip install -e ".[local-ai]"`, then place `qwen2.5-coder-7b-q4.gguf` in the project `models/` directory, or set `AETHER_MODEL_PATH` to an existing GGUF file. The engine loads the model on first inference and makes no network requests; vision inference is not supported by this text model.
+
+The optional local HTTP service is available with `python -m pip install -e ".[api]"` and can be launched with `aether-server` or `python server.py`. It listens only on `127.0.0.1:8000`; check `/health` and submit JSON with `prompt` and an optional `reasoning_effort` (`none`, `low`, `medium`, `high`, `xhigh`, or `max`) to `/v1/chat/completions`. Inference is serialized because the local model backend is not assumed to be safe for concurrent calls. Cross-origin requests are denied by default; set `AETHER_CORS_ORIGINS` to a comma-separated list of trusted origins only when needed. The service returns HTTP 503 when model weights or the local inference backend are unavailable. Token usage and tool calling are not reported because the current inference engine does not provide those features. CI and the full test suite install both the development and API extras.
 
 ## Usage
 

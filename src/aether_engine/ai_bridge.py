@@ -258,8 +258,10 @@ class LocalAirGappedEngine:
             not isinstance(reasoning_effort, str)
             or reasoning_effort not in _REASONING_EFFORTS
         ):
-            choices = ", ".join(sorted(_REASONING_EFFORTS))
-            raise ValueError(f"Reasoning effort must be one of: {choices}.")
+            allowed_efforts = ", ".join(sorted(_REASONING_EFFORTS))
+            raise ValueError(
+                f"Reasoning effort must be one of: {allowed_efforts}."
+            )
 
         if not self.model_path.is_file():
             logging.warning(
