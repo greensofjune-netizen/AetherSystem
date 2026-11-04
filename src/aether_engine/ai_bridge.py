@@ -4,15 +4,34 @@ import json
 import logging
 import os
 from collections.abc import Callable
+from importlib import import_module
 from pathlib import Path
-from typing import Any
+from typing import Any, Protocol, cast
 
 _REASONING_EFFORTS = {"none", "low", "medium", "high", "xhigh", "max"}
+_LOCAL_TOKEN_BUDGETS = {
+    "none": 256,
+    "low": 512,
+    "medium": 1024,
+    "high": 2048,
+    "xhigh": 3072,
+    "max": 4096,
+}
 _DEFAULT_MODEL_ID = "gpt-6-luna"
 _SIMULATED_CONTENT = {
     "qed_analysis": "Topological baseline stable. Ready for 100yr sync."
 }
 _Transport = Callable[[dict[str, Any], str], dict[str, Any]]
+
+
+class _LocalChatModel(Protocol):
+    def create_chat_completion(
+        self,
+        *,
+        messages: list[dict[str, str]],
+        max_tokens: int,
+        temperature: float,
+    ) -> dict[str, Any]: ...
 
 
 class AetherLunaBridge:
@@ -185,22 +204,54 @@ class AetherLunaBridge:
 
 
 class LocalAirGappedEngine:
-    """Local model interface that reports explicitly when inference is unavailable."""
+    """Run text inference using a local GGUF model when its backend is installed."""
 
     def __init__(
         self,
         model_filename: str = "qwen2.5-coder-7b-q4.gguf",
+        *,
+        model_path: str | Path | None = None,
     ) -> None:
         self.workspace_root = Path.cwd()
         self.models_dir = self.workspace_root / "models"
-        self.model_path = self.models_dir / model_filename
+        configured_path = (
+            model_path if model_path is not None else os.environ.get("AETHER_MODEL_PATH")
+        )
+        if configured_path is not None:
+            if not str(configured_path).strip():
+                raise ValueError("Model path cannot be empty.")
+            self.model_path = Path(configured_path).expanduser()
+        else:
+            self.model_path = self.models_dir / model_filename
+        self._model: _LocalChatModel | None = None
+
+    def _load_model(self) -> _LocalChatModel | None:
+        if self._model is not None:
+            return self._model
+        try:
+            llama_cpp = import_module("llama_cpp")
+        except ModuleNotFoundError as exc:
+            if exc.name != "llama_cpp":
+                raise
+            return None
+
+        llama = getattr(llama_cpp, "Llama")
+        self._model = cast(
+            _LocalChatModel,
+            llama(
+                model_path=str(self.model_path),
+                n_ctx=4096,
+                verbose=False,
+            ),
+        )
+        return self._model
 
     def execute_local_inference(
         self,
         prompt: str,
         reasoning_effort: str = "medium",
     ) -> dict[str, Any]:
-        """Report model availability; no inference backend is bundled."""
+        """Generate a text response locally without contacting a remote service."""
         if not isinstance(prompt, str) or not prompt.strip():
             raise ValueError("Prompt cannot be empty.")
         if (
@@ -220,10 +271,45 @@ class LocalAirGappedEngine:
                 "output": "Local model weights are missing; no inference was performed.",
             }
 
+        model = self._load_model()
+        if model is None:
+            logging.warning(
+                "Local inference backend is unavailable; install the local-ai extra."
+            )
+            return {
+                "status": "INFERENCE_UNAVAILABLE",
+                "model": self.model_path.name,
+                "output": (
+                    "Model weights are present, but llama-cpp-python is not installed. "
+                    'Install it with python -m pip install -e ".[local-ai]".'
+                ),
+            }
+
+        response = model.create_chat_completion(
+            messages=[
+                {
+                    "role": "system",
+                    "content": (
+                        "You are a local coding assistant. Be accurate and concise."
+                    ),
+                },
+                {"role": "user", "content": prompt.strip()},
+            ],
+            max_tokens=_LOCAL_TOKEN_BUDGETS[reasoning_effort],
+            temperature=0.2,
+        )
+        choices = response.get("choices")
+        if not isinstance(choices, list) or not choices or not isinstance(
+            choices[0], dict
+        ):
+            raise RuntimeError("Local model returned no completion choices.")
+        message = choices[0].get("message")
+        if not isinstance(message, dict) or not isinstance(message.get("content"), str):
+            raise RuntimeError("Local model returned an invalid completion message.")
         return {
-            "status": "INFERENCE_UNAVAILABLE",
+            "status": "SUCCESS",
             "model": self.model_path.name,
-            "output": "Model weights are present, but no inference backend is configured.",
+            "output": message["content"],
         }
 
     def process_local_vision(

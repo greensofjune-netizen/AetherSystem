@@ -2,6 +2,8 @@ from __future__ import annotations
 
 import json
 import os
+import sys
+from types import SimpleNamespace
 
 import pytest
 
@@ -142,3 +144,70 @@ def test_local_engine_does_not_change_proxy_settings_or_create_model_directory(
     }
     assert os.environ["HTTP_PROXY"] == "http://proxy.example.test"
     assert os.environ["HTTPS_PROXY"] == "https://proxy.example.test"
+
+
+def test_local_engine_runs_quantized_model_without_network(
+    tmp_path, monkeypatch
+) -> None:
+    model_path = tmp_path / "qwen2.5-coder-7b-q4.gguf"
+    model_path.touch()
+    captured: dict[str, object] = {}
+
+    class FakeLlama:
+        def __init__(self, **options: object) -> None:
+            captured["options"] = options
+
+        def create_chat_completion(
+            self,
+            *,
+            messages: list[dict[str, str]],
+            max_tokens: int,
+            temperature: float,
+        ) -> dict[str, object]:
+            captured["messages"] = messages
+            captured["max_tokens"] = max_tokens
+            captured["temperature"] = temperature
+            return {
+                "choices": [{"message": {"content": "Use a local GGUF model."}}]
+            }
+
+    monkeypatch.setitem(sys.modules, "llama_cpp", SimpleNamespace(Llama=FakeLlama))
+    engine = LocalAirGappedEngine(model_path=model_path)
+
+    assert engine.execute_local_inference("  Explain local inference.  ", "high") == {
+        "status": "SUCCESS",
+        "model": model_path.name,
+        "output": "Use a local GGUF model.",
+    }
+    assert captured["options"] == {
+        "model_path": str(model_path),
+        "n_ctx": 4096,
+        "verbose": False,
+    }
+    assert captured["messages"] == [
+        {
+            "role": "system",
+            "content": "You are a local coding assistant. Be accurate and concise.",
+        },
+        {"role": "user", "content": "Explain local inference."},
+    ]
+    assert captured["max_tokens"] == 2048
+    assert captured["temperature"] == 0.2
+
+
+def test_local_engine_reports_missing_inference_backend(tmp_path, monkeypatch) -> None:
+    model_path = tmp_path / "qwen2.5-coder-7b-q4.gguf"
+    model_path.touch()
+
+    def missing_backend(module_name: str) -> object:
+        assert module_name == "llama_cpp"
+        raise ModuleNotFoundError(
+            "No module named 'llama_cpp'", name="llama_cpp"
+        )
+
+    monkeypatch.setattr("aether_engine.ai_bridge.import_module", missing_backend)
+    result = LocalAirGappedEngine(model_path=model_path).execute_local_inference("Code")
+
+    assert result["status"] == "INFERENCE_UNAVAILABLE"
+    assert result["model"] == model_path.name
+    assert "llama-cpp-python is not installed" in result["output"]

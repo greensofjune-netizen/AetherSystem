@@ -23,6 +23,8 @@ To copy the current engine source, tests, and project configuration into another
 
 The optional `aether_engine.ai_bridge.AetherLunaBridge` runs in offline simulation mode by default; try it with `python -m aether_engine.ai_bridge`. It does not send requests to OpenAI, and its default `gpt-6-luna` identifier is a caller-provided label, not a verified available model. Live provider integration requires an explicitly supplied transport callable and API key; no OpenAI SDK or live provider adapter is included.
 
+`aether_engine.ai_bridge.LocalAirGappedEngine` can run text inference with a local Qwen 2.5 Coder GGUF file. Install the optional backend with `python -m pip install -e ".[local-ai]"`, then place `qwen2.5-coder-7b-q4.gguf` in the project `models/` directory, or set `AETHER_MODEL_PATH` to an existing GGUF file. The engine loads the model on first inference and makes no network requests; vision inference is not supported by this text model.
+
 ## Usage
 
 ```bash
