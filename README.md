@@ -15,6 +15,10 @@ On Windows, activate with `.venv\Scripts\activate` instead.
 
 The editable install exposes the `aether-engine` command from this checkout. After code changes, rerun `python -m pytest`; to verify the installed command, run `aether-engine --help`.
 
+## Build a standalone executable
+
+Install the optional build dependency with `python -m pip install -e ".[build]"`, then run `python build_app.py`. PyInstaller writes the executable to `dist/`; the build targets the operating system and architecture of the Python interpreter used to run the script. Check the result with `./dist/aether-engine --help` on macOS and Linux.
+
 To copy the current engine source, tests, and project configuration into another directory without overwriting existing files, run `python seed_project.py --target ../new-aether-project`.
 
 The optional `aether_engine.ai_bridge.AetherLunaBridge` runs in offline simulation mode by default; try it with `python -m aether_engine.ai_bridge`. It does not send requests to OpenAI, and its default `gpt-6-luna` identifier is a caller-provided label, not a verified available model. Live provider integration requires an explicitly supplied transport callable and API key; no OpenAI SDK or live provider adapter is included.

@@ -95,3 +95,17 @@ def test_bridge_validates_prompt_and_reasoning_effort(
 def test_bridge_rejects_empty_model_identifier() -> None:
     with pytest.raises(ValueError, match="Model identifier cannot be empty"):
         AetherLunaBridge(model_id="  ")
+
+
+def test_multimodal_vision_and_audio_simulated_payloads():
+    """Verifies that the upgraded bridge correctly parses both image and voice structures."""
+    bridge = AetherLunaBridge(api_key="mock_qed_key")
+
+    vision_res = bridge.analyze_visual_vector(
+        "stardust_bytes_base64", "Scan the console frame."
+    )
+    assert vision_res["status"] == "SIMULATED"
+    assert "choices" in vision_res
+
+    audio_res = bridge.process_conversational_audio("speech_stream_bytes_base64")
+    assert "audio" in audio_res["choices"][0]["message"]

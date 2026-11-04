@@ -88,6 +88,101 @@ class AetherLunaBridge:
             raise ValueError("AI transport must return a response object.")
         return response
 
+    def analyze_visual_vector(
+        self,
+        image_base64_string: str,
+        query_text: str,
+    ) -> dict[str, Any]:
+        """Analyze an image with a vision-capable model or simulated response."""
+        if not isinstance(self.api_key, str) or not self.api_key.strip():
+            raise ValueError(
+                "Authentication failed: an API key is required for visual analysis."
+            )
+
+        self._logger.info("Encoding visual input for %s.", self.model_id)
+        payload: dict[str, Any] = {
+            "model": self.model_id,
+            "messages": [
+                {
+                    "role": "user",
+                    "content": [
+                        {"type": "text", "text": query_text},
+                        {
+                            "type": "image_url",
+                            "image_url": {
+                                "url": f"data:image/jpeg;base64,{image_base64_string}"
+                            },
+                        },
+                    ],
+                }
+            ],
+            "response_format": {"type": "json_object"},
+        }
+
+        if self._transport is not None:
+            response = self._transport(payload, self.api_key)
+            if not isinstance(response, dict):
+                raise ValueError("AI transport must return a response object.")
+            return response
+
+        return {
+            "status": "SIMULATED",
+            "choices": [
+                {
+                    "message": {
+                        "content": '{"visual_audit": "Local environment fence checked. 0 errors."}'
+                    }
+                }
+            ],
+        }
+
+    def process_conversational_audio(
+        self,
+        input_audio_base64: str,
+    ) -> dict[str, Any]:
+        """Process audio input with a conversational model or simulated response."""
+        if not isinstance(self.api_key, str) or not self.api_key.strip():
+            raise ValueError(
+                "Authentication failed: an API key is required for audio processing."
+            )
+
+        self._logger.info("Preparing conversational audio input.")
+        payload: dict[str, Any] = {
+            "model": self.model_id,
+            "modalities": ["text", "audio"],
+            "audio": {"voice": "alloy", "format": "wav"},
+            "messages": [
+                {
+                    "role": "user",
+                    "content": [
+                        {
+                            "type": "input_audio",
+                            "data": input_audio_base64,
+                            "format": "wav",
+                        }
+                    ],
+                }
+            ],
+        }
+
+        if self._transport is not None:
+            response = self._transport(payload, self.api_key)
+            if not isinstance(response, dict):
+                raise ValueError("AI transport must return a response object.")
+            return response
+
+        return {
+            "status": "SIMULATED",
+            "choices": [
+                {
+                    "message": {
+                        "audio": {"data": "Aether_v6_audio_bytes_stub"},
+                        "content": "Aether system loops functional and listening.",
+                    }
+                }
+            ],
+        }
+
 
 def main() -> int:
     bridge = AetherLunaBridge()

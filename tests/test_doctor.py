@@ -1,4 +1,5 @@
 import os
+import sys
 from pathlib import Path
 
 import pytest
@@ -9,9 +10,34 @@ from aether_engine.database import AetherStore
 from aether_engine.engine_doctor import AetherEngineDoctor
 
 
+def test_doctor_reports_virtual_environment_as_ok(
+    tmp_path: Path, monkeypatch
+) -> None:
+    virtual_env = "/Users/eh/Desktop/AetherSystem/.venv"
+    monkeypatch.setattr(sys, "prefix", virtual_env)
+    monkeypatch.setattr(sys, "base_prefix", "/usr/local")
+    monkeypatch.setattr(
+        doctor_module,
+        "backup_schedule_status",
+        lambda _database: (tmp_path / "agent.plist", False, False, None),
+    )
+    database = tmp_path / "database.db"
+    AetherStore(database)
+
+    results = AetherEngineDoctor(database).diagnostics()
+    environment = next(
+        result for result in results if result.name == "Python environment"
+    )
+
+    assert environment.status == "OK"
+    assert environment.detail == f"Virtual environment: {virtual_env}"
+
+
 def test_doctor_checks_database_backup_permissions_and_schedule(
     tmp_path: Path, monkeypatch, capsys
 ) -> None:
+    monkeypatch.setattr(sys, "prefix", str(tmp_path / ".venv"))
+    monkeypatch.setattr(sys, "base_prefix", "/usr/local")
     database = tmp_path / "project.sqlite3"
     backup_directory = tmp_path / ".aether-backups"
     store = AetherStore(database)
