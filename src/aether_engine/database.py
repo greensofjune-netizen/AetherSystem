@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import logging
 import os
 import sqlite3
 import subprocess
@@ -660,3 +661,22 @@ class AetherStore:
             events.append(event)
 
         return tasks, events
+
+
+class SecureAetherStore(AetherStore):
+    """Aether store with private local-file permissions and the standard schema.
+
+    SQLite database files are not encrypted by this class. Use an actual
+    SQLCipher build and a separately managed key when encryption at rest is
+    required.
+    """
+
+    def __init__(
+        self,
+        db_path: str | Path = ".aether-engine.sqlite3",
+    ) -> None:
+        super().__init__(db_path)
+        logging.getLogger(__name__).info(
+            "Initialized local Aether database with owner-only file permissions: %s",
+            self.database_path,
+        )

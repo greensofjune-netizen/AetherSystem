@@ -1,10 +1,11 @@
 from __future__ import annotations
 
 import json
+import os
 
 import pytest
 
-from aether_engine.ai_bridge import AetherLunaBridge
+from aether_engine.ai_bridge import AetherLunaBridge, LocalAirGappedEngine
 
 
 def test_bridge_uses_offline_simulation_without_network_or_credentials(
@@ -109,3 +110,35 @@ def test_multimodal_vision_and_audio_simulated_payloads():
 
     audio_res = bridge.process_conversational_audio("speech_stream_bytes_base64")
     assert "audio" in audio_res["choices"][0]["message"]
+
+
+def test_multimodal_simulation_does_not_require_credentials(monkeypatch) -> None:
+    monkeypatch.delenv("OPENAI_API_KEY", raising=False)
+    bridge = AetherLunaBridge()
+
+    assert bridge.analyze_visual_vector("image-data", "Describe the image.")[
+        "status"
+    ] == "SIMULATED"
+    assert bridge.process_conversational_audio("audio-data")["status"] == "SIMULATED"
+
+
+def test_local_engine_does_not_change_proxy_settings_or_create_model_directory(
+    tmp_path, monkeypatch
+) -> None:
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setenv("HTTP_PROXY", "http://proxy.example.test")
+    monkeypatch.setenv("HTTPS_PROXY", "https://proxy.example.test")
+
+    engine = LocalAirGappedEngine()
+
+    assert not (tmp_path / "models").exists()
+    assert engine.execute_local_inference("Check local model availability.") == {
+        "status": "OFFLINE_FALLBACK",
+        "output": "Local model weights are missing; no inference was performed.",
+    }
+    assert engine.process_local_vision("image-data", "Describe image.") == {
+        "status": "INFERENCE_UNAVAILABLE",
+        "analysis": "No local vision backend is configured; no image was analyzed.",
+    }
+    assert os.environ["HTTP_PROXY"] == "http://proxy.example.test"
+    assert os.environ["HTTPS_PROXY"] == "https://proxy.example.test"

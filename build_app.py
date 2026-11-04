@@ -7,25 +7,32 @@ import tempfile
 from pathlib import Path
 
 
-def package_production_binary() -> int:
+def run_cookie_cutter_build() -> int:
     workspace_root = Path(__file__).resolve().parent
     source_directory = workspace_root / "src"
     dist_directory = workspace_root / "dist"
     build_directory = workspace_root / "build"
     output_name = "aether-engine"
+    entry_script = source_directory / "aether_engine" / "cli.py"
     output_binary = dist_directory / (
         f"{output_name}.exe" if sys.platform == "win32" else output_name
     )
 
     print("=" * 70)
-    print("AETHER APP BUNDLER: BUILDING A STANDALONE EXECUTABLE")
+    print("AETHER CORE BUNDLER: BUILDING A STANDALONE EXECUTABLE")
     print("=" * 70)
-    print(f"Project: {workspace_root}")
-    print(f"Target platform: {platform.system()} ({platform.machine()})")
+
+    if not entry_script.is_file():
+        print(f"Entry script not found: {entry_script}", file=sys.stderr)
+        return 1
+
+    print(f"Packaging entry point: {entry_script}")
+    print(f"Build platform: {platform.system()} ({platform.machine()})")
 
     dist_directory.mkdir(parents=True, exist_ok=True)
     build_directory.mkdir(parents=True, exist_ok=True)
 
+    # Import the CLI as a package; executing cli.py directly breaks relative imports.
     launcher_source = (
         "from aether_engine.cli import main\n\n"
         'if __name__ == "__main__":\n'
@@ -37,9 +44,7 @@ def package_production_binary() -> int:
             launcher = Path(temp_dir) / "aether_engine_entry.py"
             launcher.write_text(launcher_source, encoding="utf-8")
             command = [
-                sys.executable,
-                "-m",
-                "PyInstaller",
+                sys.executable, "-m", "PyInstaller",
                 "--onefile",
                 f"--name={output_name}",
                 "--clean",
@@ -50,7 +55,7 @@ def package_production_binary() -> int:
                 f"--specpath={build_directory}",
                 str(launcher),
             ]
-            print("\nStarting PyInstaller...")
+            print("\nExecuting PyInstaller...")
             subprocess.run(
                 command,
                 cwd=workspace_root,
@@ -59,29 +64,28 @@ def package_production_binary() -> int:
                 text=True,
             )
     except subprocess.CalledProcessError as error:
-        print("Build failed.")
+        print("Executable build failed.", file=sys.stderr)
         if error.stdout:
             print(error.stdout)
         if error.stderr:
             print(error.stderr, file=sys.stderr)
         return error.returncode or 1
     except OSError as error:
-        print(f"Unable to run the build: {error}", file=sys.stderr)
+        print(f"Unable to run PyInstaller: {error}", file=sys.stderr)
         return 1
 
     if not output_binary.is_file():
         print(
-            f"Build completed but the expected executable was not created: "
-            f"{output_binary}",
+            f"Build completed without producing the expected executable: {output_binary}",
             file=sys.stderr,
         )
         return 1
 
-    print("\nBuild succeeded.")
-    print(f"Executable: {output_binary}")
-    print(f"Try it with: ./dist/{output_name} --help")
+    print("\nStandalone executable built successfully.")
+    print(f"Binary: {output_binary}")
+    print(f"Verify with: ./dist/{output_name} --help")
     return 0
 
 
 if __name__ == "__main__":
-    raise SystemExit(package_production_binary())
+    raise SystemExit(run_cookie_cutter_build())

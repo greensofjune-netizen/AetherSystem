@@ -6,7 +6,7 @@ import pytest
 
 from aether_engine import engine_doctor as doctor_module
 from aether_engine.backups import write_backup
-from aether_engine.database import AetherStore
+from aether_engine.database import AetherStore, SecureAetherStore
 from aether_engine.engine_doctor import AetherEngineDoctor
 
 
@@ -104,6 +104,20 @@ def test_doctor_reports_unconfigured_backup_and_schedule_as_warnings(
     assert results[1].status == "WARN"
     assert results[2].status == "WARN"
     assert results[3].status == "WARN"
+
+
+def test_secure_store_uses_existing_schema_and_private_permissions(
+    tmp_path: Path,
+) -> None:
+    database = tmp_path / "secure.sqlite3"
+
+    store = SecureAetherStore(database)
+    task = store.add_task("Check secure store")
+
+    assert task.title == "Check secure store"
+    assert store.list_tasks()[0].id == task.id
+    if os.name != "nt":
+        assert database.stat().st_mode & 0o777 == 0o600
 
 
 @pytest.mark.skipif(os.name == "nt", reason="POSIX file modes are not Windows ACLs")
