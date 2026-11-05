@@ -1,129 +1,34 @@
 from __future__ import annotations
 
-import logging
-import subprocess
-import sys
+import json
 from pathlib import Path
-
-_LOGGER = logging.getLogger(__name__)
-_COMMAND_TIMEOUT_SECONDS = 600
+from typing import Any, Final
 
 
-class EngineCoreUpdater:
-    """Upgrade local build tools and rebuild the Aether executable."""
+class ConfigurationReloadAnomalyError(Exception):
+    """Raised when the system fails to parse or validate hot-swapped engine configurations."""
 
-    def __init__(self, current_version: str = "13.0.0") -> None:
-        self.workspace_root = Path(__file__).resolve().parents[2]
-        self.current_version = current_version
-        self.dist_dir = self.workspace_root / "dist"
 
-    @staticmethod
-    def _is_virtual_environment() -> bool:
-        return sys.prefix != sys.base_prefix
+class EngineUpdater:
+    def __init__(self, config_path: str | Path) -> None:
+        """Initialize the hot-reloading update loop engine with local file coordinates."""
+        self.config_path: Final[Path] = Path(config_path)
 
-    def scan_and_upgrade_software_packages(self) -> bool:
-        """Upgrade build and test tools in the active virtual environment."""
-        if not self._is_virtual_environment():
-            _LOGGER.error(
-                "Refusing to upgrade packages outside a virtual environment."
+    def reload_system_manifest(self) -> dict[str, Any]:
+        """Parse and hot-swap live system parameters from the local disk architecture."""
+        if not self.config_path.exists():
+            raise ConfigurationReloadAnomalyError(
+                f"Target update manifest missing at: {self.config_path}"
             )
-            return False
 
-        _LOGGER.info("Upgrading pip, Ruff, PyInstaller, and pytest.")
-        command = [
-            sys.executable,
-            "-m",
-            "pip",
-            "install",
-            "--upgrade",
-            "pip",
-            "ruff",
-            "pyinstaller",
-            "pytest",
-        ]
         try:
-            subprocess.run(
-                command,
-                cwd=self.workspace_root,
-                check=True,
-                capture_output=True,
-                text=True,
-                timeout=_COMMAND_TIMEOUT_SECONDS,
-            )
-        except subprocess.CalledProcessError as error:
-            _LOGGER.error("Package upgrade failed: %s", error.stderr or error)
-            return False
-        except subprocess.TimeoutExpired:
-            _LOGGER.error("Package upgrade timed out.")
-            return False
-        except OSError:
-            _LOGGER.exception("Unable to start the package upgrade.")
-            return False
-
-        _LOGGER.info("Build and test tool upgrades completed.")
-        return True
-
-    def trigger_binary_recompilation(self) -> bool:
-        """Run the project's build script using the active Python interpreter."""
-        build_script = self.workspace_root / "build_app.py"
-        if not build_script.is_file():
-            _LOGGER.warning("Build script not found; skipping executable rebuild.")
-            return False
-        if not self._is_virtual_environment():
-            _LOGGER.error(
-                "Refusing to rebuild outside a virtual environment."
-            )
-            return False
-
-        _LOGGER.info("Rebuilding the standalone executable.")
-        try:
-            result = subprocess.run(
-                [sys.executable, str(build_script)],
-                cwd=self.workspace_root,
-                check=True,
-                capture_output=True,
-                text=True,
-                timeout=_COMMAND_TIMEOUT_SECONDS,
-            )
-        except subprocess.CalledProcessError as error:
-            _LOGGER.error("Executable rebuild failed: %s", error.stderr or error)
-            return False
-        except subprocess.TimeoutExpired:
-            _LOGGER.error("Executable rebuild timed out.")
-            return False
-        except OSError:
-            _LOGGER.exception("Unable to start the executable rebuild.")
-            return False
-
-        if result.stdout.strip():
-            _LOGGER.info("%s", result.stdout.strip())
-        _LOGGER.info("Standalone executable rebuild completed.")
-        return True
-
-    def execute_complete_core_maintenance_cycle(self) -> str:
-        """Upgrade local tools and rebuild the standalone executable."""
-        _LOGGER.info("Starting Aether updater maintenance cycle.")
-        if not self._is_virtual_environment():
-            _LOGGER.error(
-                "Virtual environment required; refusing to run maintenance."
-            )
-            return "VULNERABLE"
-
-        software_updated = self.scan_and_upgrade_software_packages()
-        binary_compiled = self.trigger_binary_recompilation()
-        cycle_succeeded = software_updated and binary_compiled
-        next_version = (
-            "13.1.0" if cycle_succeeded else self.current_version
-        )
-        status = "NOMINAL" if cycle_succeeded else "DEGRADED"
-
-        _LOGGER.info(
-            "Maintenance cycle %s; version trajectory: v%s.",
-            status.lower(),
-            next_version,
-        )
-        return status
+            with open(self.config_path, "r") as file:
+                return json.load(file)
+        except json.JSONDecodeError as error:
+            raise ConfigurationReloadAnomalyError(
+                f"Malformed configuration syntax detected: {str(error)}"
+            ) from error
 
 
 if __name__ == "__main__":
-    EngineCoreUpdater().execute_complete_core_maintenance_cycle()
+    print("🔄 Aether Engine Updater ready for hot-reload sequences.")

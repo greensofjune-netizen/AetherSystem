@@ -7,8 +7,43 @@ from pathlib import Path
 
 import pytest
 
-from aether_engine.cli import _resolve_database_path, main
+from aether_engine.cli import _resolve_database_path, launch_aether_shell, main
 from aether_engine.database import AetherStore, _secure_windows_file
+
+
+def test_interactive_shell_streams_ollama_response(monkeypatch, capsys) -> None:
+    prompts = iter(["", "hello core", "quit"])
+    calls: list[dict[str, object]] = []
+
+    def generate(**kwargs):
+        calls.append(kwargs)
+        return iter(
+            [{"response": "Hello"}, {"response": " there"}]
+        )
+
+    monkeypatch.setattr("builtins.input", lambda _prompt: next(prompts))
+    monkeypatch.setattr("ollama.generate", generate)
+
+    launch_aether_shell()
+
+    assert calls == [
+        {"model": "aethersystem-core", "prompt": "hello core", "stream": True}
+    ]
+    output = capsys.readouterr().out
+    assert "AETHER SYSTEM CORE TERMINAL INTERFACE" in output
+    assert "Hello there" in output
+    assert "Closing session" in output
+
+
+def test_main_without_arguments_launches_interactive_shell(monkeypatch) -> None:
+    launched: list[bool] = []
+    monkeypatch.setattr(
+        "aether_engine.cli.launch_aether_shell",
+        lambda: launched.append(True),
+    )
+
+    assert main([]) == 0
+    assert launched == [True]
 
 
 def test_event_commands_persist_history(tmp_path: Path, capsys) -> None:

@@ -331,8 +331,50 @@ def _print_tasks(
         print(f"#{task.id} [{task.status}] {task.title}{description}{details}")
 
 
+def launch_aether_shell() -> None:
+    import ollama
+
+    model_name = "aethersystem-core"
+    print("=" * 60)
+    print(" AETHER SYSTEM CORE TERMINAL INTERFACE ")
+    print(f" Active Brain: {model_name} | Type 'exit' or 'quit' to close")
+    print("=" * 60)
+
+    while True:
+        try:
+            user_input = input("\nAetherSystem ❯ ")
+            if user_input.strip().lower() in ["exit", "quit"]:
+                print("[CLI] Closing session. Operational posture maintained.")
+                break
+
+            if not user_input.strip():
+                continue
+
+            print("[CLI] Routing token sequences to core...")
+
+            stream = ollama.generate(
+                model=model_name, prompt=user_input, stream=True
+            )
+
+            print("\nResponse:")
+            for chunk in stream:
+                print(chunk["response"], end="", flush=True)
+            print()
+
+        except KeyboardInterrupt:
+            print("\n[CLI] Session interrupted. Exiting.")
+            sys.exit(0)
+        except Exception as error:
+            print(f"\n[!] Interface Error: {str(error)}")
+
+
 def main(argv: Sequence[str] | None = None) -> int:
-    args = _build_parser().parse_args(argv)
+    arguments = list(argv) if argv is not None else sys.argv[1:]
+    if not arguments:
+        launch_aether_shell()
+        return 0
+
+    args = _build_parser().parse_args(arguments)
     try:
         database_path = _resolve_database_path(args.database)
         if args.command == "doctor":
