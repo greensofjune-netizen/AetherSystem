@@ -7,7 +7,44 @@ import pytest
 from aether_engine import engine_doctor as doctor_module
 from aether_engine.backups import write_backup
 from aether_engine.database import AetherStore, SecureAetherStore
-from aether_engine.engine_doctor import AetherEngineDoctor
+from aether_engine.engine_doctor import (
+    AetherEngineDoctor,
+    EngineDoctor,
+    SystemEnvironmentAnomalyError,
+)
+
+
+def test_engine_doctor_validates_local_interpreter_and_project(
+    tmp_path: Path, monkeypatch
+) -> None:
+    project = tmp_path / "project"
+    project.mkdir()
+    (project / "pyproject.toml").write_text("[project]\n", encoding="utf-8")
+    executable = str(tmp_path / ".venv" / "bin" / "python")
+    monkeypatch.setattr(doctor_module.sys, "executable", executable)
+
+    doctor = EngineDoctor(project)
+
+    assert doctor.verify_interpreter_sandbox() == executable
+    assert doctor.run_full_diagnostic_sweep() == {
+        "interpreter_path": executable,
+        "pyproject_validated": True,
+        "status_healthy": True,
+    }
+
+
+def test_engine_doctor_reports_non_virtual_interpreter(tmp_path: Path, monkeypatch) -> None:
+    executable = str(tmp_path / "python")
+    monkeypatch.setattr(doctor_module.sys, "executable", executable)
+
+    doctor = EngineDoctor(tmp_path)
+
+    with pytest.raises(SystemEnvironmentAnomalyError, match="Rogue execution runtime"):
+        doctor.verify_interpreter_sandbox()
+    assert doctor.run_full_diagnostic_sweep() == {
+        "error_telemetry": f"Rogue execution runtime identified at: {executable}",
+        "status_healthy": False,
+    }
 
 
 def test_doctor_reports_virtual_environment_as_ok(

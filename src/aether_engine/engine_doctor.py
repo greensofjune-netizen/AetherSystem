@@ -6,10 +6,44 @@ import sys
 import time
 from dataclasses import dataclass
 from pathlib import Path
+from typing import Final
 
 from .backups import _BACKUP_NAME
 from .database import AetherStore, database_permission_issues
 from .scheduler import SchedulerError, backup_schedule_status
+
+
+class SystemEnvironmentAnomalyError(Exception):
+    """Raised when critical engine runtime directories or environmental vectors fail verification."""
+
+
+class EngineDoctor:
+    def __init__(self, workspace_root: str | Path | None = None) -> None:
+        """Initialize the diagnostic sentinel with targeted workspace coordinates."""
+        self.workspace_root: Final[Path] = Path(workspace_root or Path.cwd())
+
+    def verify_interpreter_sandbox(self) -> str:
+        """Assert the primary Python execution environment is isolated locally."""
+        executable_path = sys.executable
+        if ".venv" not in executable_path:
+            raise SystemEnvironmentAnomalyError(
+                f"Rogue execution runtime identified at: {executable_path}"
+            )
+        return executable_path
+
+    def run_full_diagnostic_sweep(self) -> dict[str, str | bool]:
+        """Validate the interpreter and essential workspace configuration."""
+        diagnostics: dict[str, str | bool] = {}
+        try:
+            diagnostics["interpreter_path"] = self.verify_interpreter_sandbox()
+            diagnostics["pyproject_validated"] = (
+                self.workspace_root / "pyproject.toml"
+            ).exists()
+            diagnostics["status_healthy"] = True
+        except SystemEnvironmentAnomalyError as error:
+            diagnostics["error_telemetry"] = str(error)
+            diagnostics["status_healthy"] = False
+        return diagnostics
 
 
 @dataclass(frozen=True)
@@ -232,3 +266,9 @@ class AetherEngineDoctor:
             return 0
         print("Result: all checks passed.")
         return 0
+
+
+if __name__ == "__main__":
+    doctor = EngineDoctor()
+    print("🩺 Aether Engine Doctor initializing diagnostic sweep...")
+    print(doctor.run_full_diagnostic_sweep())
