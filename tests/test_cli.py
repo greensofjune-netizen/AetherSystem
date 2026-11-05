@@ -108,6 +108,13 @@ def test_status_dashboard_unifies_tasks_and_activity(
     assert "#2  [NORMAL]  Write release notes" in output
     assert "release: Dashboard is ready" in output
 
+    assert main(["--database", database, "task", "complete", "2"]) == 0
+    capsys.readouterr()
+    assert main(["--database", database, "status"]) == 0
+    output = capsys.readouterr().out
+    assert "0 open   2 done   2 total" in output
+    assert "100% complete" in output
+
 
 def test_status_dashboard_handles_empty_project(tmp_path: Path, capsys) -> None:
     result = main(

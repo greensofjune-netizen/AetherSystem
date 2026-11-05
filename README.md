@@ -66,7 +66,7 @@ aether-engine restore project-backup.json
 aether-engine restore project-backup.json --replace
 ```
 
-The `--priority` option accepts `low`, `normal` (the default), or `high`. The optional `--due` date must use `YYYY-MM-DD`; overdue tasks are highlighted on the status dashboard.
+The `--priority` option accepts `low`, `normal` (the default), or `high`. The optional `--due` date must use `YYYY-MM-DD`; overdue tasks are highlighted on the status dashboard. CLI and API completion percentages are based on all tracked tasks: they reach 100% when every task is done and remain 0% when there are no tasks.
 Edit tasks with `task edit ID` and one or more of `--title`, `--description`, `--priority`, or `--due`; use `--clear-due` to remove a due date. Task `--search` matches titles and descriptions; event `--search` matches topic and message, and event history can also be filtered by exact `--topic` and inclusive UTC `--since`/`--until` dates.
 
 Task and event text is trimmed and sanitized before it is saved, including on task edits and restores. Blank task titles and blank event topics/messages are rejected with a clear error. Common leading shell prompts and trailing backticks/Markdown closing markers are removed; inner shell operators such as `&&`, `;`, and `|` are preserved.

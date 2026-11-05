@@ -115,6 +115,18 @@ class DashboardSnapshot:
     pending_tasks: list[Task]
     recent_events: list[Event]
 
+    @property
+    def total_count(self) -> int:
+        return self.pending_count + self.done_count
+
+    @property
+    def completion_percent(self) -> int:
+        return (
+            round(self.done_count / self.total_count * 100)
+            if self.total_count
+            else 0
+        )
+
 
 class AetherStore:
     def __init__(self, database_path: str | Path) -> None:

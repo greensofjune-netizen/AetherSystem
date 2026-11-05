@@ -235,8 +235,8 @@ def _dashboard_section(title: str) -> None:
 
 def _print_dashboard(store: AetherStore) -> None:
     snapshot = store.dashboard_snapshot()
-    total = snapshot.pending_count + snapshot.done_count
-    percent = round(snapshot.done_count / total * 100) if total else 0
+    total = snapshot.total_count
+    percent = snapshot.completion_percent
     filled = round(percent / 100 * 12)
     progress = f"[{'■' * filled}{'·' * (12 - filled)}] {percent:3}% complete"
 
