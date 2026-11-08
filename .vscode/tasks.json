@@ -1,23 +1,42 @@
 {
-    "version": "2.0.0",
-    "tasks": [
-        {
-            "label": "🎵 Spin Aether Jukebox",
-            "type": "shell",
-            "command": "${command:python.interpreterPath} src/aether_engine/jukebox.py",
-            "problemMatcher": [],
-            "group": {
-                "kind": "build",
-                "isDefault": true
-            },
-            "presentation": {
-                "echo": true,
-                "reveal": "always",
-                "focus": true,
-                "panel": "shared",
-                "showReuseMessage": false,
-                "clear": true
-            }
-        }
-    ]
+	"version": "2.0.0",
+	"tasks": [
+		{
+			"label": "🎵 Spin Aether Jukebox",
+			"type": "shell",
+			"command": "${command:python.interpreterPath} src/aether_engine/jukebox.py",
+			"problemMatcher": [],
+			"group": {
+				"kind": "build",
+				"isDefault": true
+			},
+			"presentation": {
+				"echo": true,
+				"reveal": "always",
+				"focus": true,
+				"panel": "shared",
+				"showReuseMessage": false,
+				"clear": true
+			}
+		},
+		{
+			"label": "Run Aether Quantum Core",
+			"type": "shell",
+			"command": "python3",
+			"args": [
+				"aether_quantum_core.py"
+			],
+			"isBackground": true
+		},
+		{
+			"label": "Run Aether Master Matrix",
+			"type": "shell",
+			"command": "python3",
+			"args": [
+				"-u",
+				"aether_master_matrix.py"
+			],
+			"isBackground": true
+		}
+	]
 }

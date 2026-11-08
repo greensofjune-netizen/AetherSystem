@@ -1,0 +1,58 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Cosmic Stargazer &amp; Orbital Telemetry</title>
+  <link rel="stylesheet" href="/stargazer.css">
+  <script src="/stargazer.js" defer></script>
+</head>
+<body>
+  <canvas id="cosmos" tabindex="0" aria-label="Illustrative starfield. Use arrow keys or drag to pan. Use the guide to select stars."></canvas>
+  <main class="hud">
+    <section class="card">
+      <div class="title-row">
+        <h1>Deep Sky Observatory</h1>
+        <span class="badge" id="sky-status">ILLUSTRATIVE SKY</span>
+      </div>
+      <div class="metric-label" id="utc-clock">UTC: --:--:--</div>
+      <p class="notice">Artistic starfield and constellation diagrams, not a location-aware sky map. Drift and meteors are visual effects.</p>
+      <div class="telemetry-grid">
+        <div><div class="metric-label">Moon Phase</div><div class="metric-val">Not connected</div></div>
+        <div><div class="metric-label">Cloud Cover</div><div class="metric-val">Not connected</div></div>
+        <div><div class="metric-label">ISS Latitude</div><div class="metric-val">Not connected</div></div>
+        <div><div class="metric-label">ISS Longitude</div><div class="metric-val">Not connected</div></div>
+      </div>
+      <p class="notice">No lunar, cloud-cover, or orbital feed is configured.</p>
+    </section>
+    <section class="card guide">
+      <label class="metric-label" for="star-guide">CONSTELLATION GUIDE</label>
+      <select id="star-guide">
+        <option value="">Select a notable star...</option>
+      </select>
+      <p id="constellation-info" role="status">Drag across the sky to pan. Click a named constellation star, or select one above. Arrow keys also pan the sky.</p>
+    </section>
+    <section class="card comms" id="ollama-comms" aria-label="Local Ollama communications">
+      <div class="title-row">
+        <strong>OLLAMA COMMS LINK</strong>
+        <span id="comms-utc" class="metric-label">Backend UTC unavailable</span>
+      </div>
+      <p class="notice" id="comms-status" role="status">Checking the local Copernicus backend...</p>
+      <p class="notice">Messages are independent; Copernicus has no persistent memory or Matrix data connection. UTC is a backend communication reference, not external clock synchronization.</p>
+      <div id="comms-log" role="log" aria-live="polite"></div>
+      <p id="comms-error" role="alert" hidden></p>
+      <form id="comms-form">
+        <label class="sr-only" for="comms-input">Message Copernicus</label>
+        <input id="comms-input" type="text" maxlength="4000" required placeholder="Message Copernicus...">
+        <button type="submit" id="comms-send" disabled>Send</button>
+      </form>
+    </section>
+  </main>
+  <nav class="controls" aria-label="Sky controls">
+    <button id="toggle-lines" class="active" aria-pressed="true">Constellation Lines: ON</button>
+    <button id="toggle-drift" class="active" aria-pressed="true">Visual Drift: ON</button>
+    <button id="trigger-meteor">Spawn Shooting Star</button>
+    <button id="reset-view">Reset View</button>
+  </nav>
+</body>
+</html>

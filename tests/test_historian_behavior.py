@@ -113,6 +113,10 @@ def test_query_brain_sends_local_non_streaming_request(
     )
     assert captured["read_size"] == 1_048_577
     assert captured["closed"] is True
+    AetherHistorian().query_brain("Hello", system="Independent Historian.")
+    request = captured["request"]
+    assert isinstance(request, tuple)
+    assert request[2]["system"] == "Independent Historian."
 
 
 def test_query_brain_reports_http_and_invalid_response_errors(
@@ -234,3 +238,56 @@ def test_main_can_run_historian_telemetry(
 
     assert result == 0
     assert "Local review result." in capsys.readouterr().out
+
+
+def test_scanner_lists_gguf_weights_from_local_and_external_directories(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    root = tmp_path / "project"
+    (root / "models").mkdir(parents=True)
+    (root / "models" / "local.gguf").write_bytes(b"1234")
+    external = tmp_path / "volume" / "models"
+    external.mkdir(parents=True)
+    (external / "remote.gguf").write_bytes(b"12")
+    (external / "notes.txt").write_text("ignore", encoding="utf-8")
+
+    search_for_model_paths(root, external_model_dirs=[external, tmp_path / "gone"])
+    output = capsys.readouterr().out
+
+    assert "local.gguf (4 bytes)" in output
+    assert "remote.gguf (2 bytes)" in output
+    assert "notes.txt" not in output
+
+
+def test_scanner_reads_external_directories_from_environment(
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    external = tmp_path / "drive"
+    external.mkdir()
+    (external / "env.gguf").write_bytes(b"x")
+    monkeypatch.setenv("AETHER_EXTERNAL_MODEL_DIRS", str(external))
+
+    search_for_model_paths(tmp_path)
+
+    assert "env.gguf (1 bytes)" in capsys.readouterr().out
+
+
+def test_scanner_defaults_include_atlas_drive_without_duplicates(
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    atlas = tmp_path / "Atlas"
+    (atlas / "models").mkdir(parents=True)
+    (atlas / "models" / "atlas.gguf").write_bytes(b"abc")
+    monkeypatch.setattr(
+        "aether_engine.historian_behavior._DEFAULT_EXTERNAL_MODEL_DIRS", (atlas,)
+    )
+    monkeypatch.setenv("AETHER_EXTERNAL_MODEL_DIRS", str(atlas / "models"))
+
+    search_for_model_paths(tmp_path)
+    output = capsys.readouterr().out
+
+    assert output.count("atlas.gguf") == 1

@@ -25,6 +25,7 @@ _EXCLUDED_DIRECTORIES = {
     "temp",
     ".aether-backups",
 }
+_DEFAULT_EXTERNAL_MODEL_DIRS = (Path("/Volumes/Atlas/models"),)
 _SENSITIVE_FILE_MARKERS = ("secret", "credential", "token", "password", "private")
 _MODEL_PATH_PATTERN = re.compile(
     r"\b(?:gguf|model_path|model_dir|model_file|llm_path)\b",
@@ -101,7 +102,7 @@ class AetherHistorian:
         self.timeout = timeout
         self.endpoint = "/api/generate"
 
-    def query_brain(self, prompt: str) -> str:
+    def query_brain(self, prompt: str, *, system: str | None = None) -> str:
         """Request one non-streaming response from the local Ollama API."""
         if not isinstance(prompt, str) or not prompt.strip():
             raise ValueError("Prompt cannot be empty.")
@@ -112,6 +113,10 @@ class AetherHistorian:
             "stream": False,
             "options": {"temperature": 0.2},
         }
+        if system is not None:
+            if not isinstance(system, str) or not system.strip():
+                raise ValueError("System instruction cannot be empty.")
+            payload["system"] = system.strip()
         connection = http.client.HTTPConnection(
             self.host, self.port, timeout=self.timeout
         )
@@ -176,8 +181,72 @@ def _is_sensitive_filename(name: str) -> bool:
     )
 
 
-def search_for_model_paths(root: str | Path = ".") -> list[tuple[Path, int]]:
-    """Find model-path references without printing source-line contents."""
+def _external_model_directories(
+    explicit: Sequence[str | Path] | None,
+) -> list[Path]:
+    """Resolve extra model directories, such as ones on external volumes."""
+    if explicit is None:
+        configured = os.environ.get("AETHER_EXTERNAL_MODEL_DIRS", "")
+        candidates: list[Path] = [
+            *_DEFAULT_EXTERNAL_MODEL_DIRS,
+            *(
+                Path(entry).expanduser()
+                for entry in configured.split(os.pathsep)
+                if entry.strip()
+            ),
+        ]
+        volumes = Path("/Volumes")
+        try:
+            candidates.extend(
+                volume / "models"
+                for volume in sorted(volumes.iterdir())
+                if not volume.is_symlink()
+            )
+        except OSError:
+            pass
+    else:
+        candidates = [Path(entry).expanduser() for entry in explicit]
+
+    resolved: list[Path] = []
+    for candidate in candidates:
+        try:
+            if not candidate.is_dir():
+                continue
+            path = candidate.resolve()
+        except OSError:
+            continue
+        # Skip folders already covered by an earlier directory's recursive scan.
+        if not any(path == kept or kept in path.parents for kept in resolved):
+            resolved.append(path)
+    return resolved
+
+
+def _find_gguf_weights(directory: Path) -> list[Path]:
+    """List regular .gguf files below a directory without following symlinks."""
+    weights: list[Path] = []
+    for current_root, directories, filenames in os.walk(directory):
+        current_path = Path(current_root)
+        directories[:] = sorted(
+            name for name in directories if not (current_path / name).is_symlink()
+        )
+        for filename in sorted(filenames):
+            path = current_path / filename
+            if path.suffix.casefold() == ".gguf" and path.is_file() and not path.is_symlink():
+                weights.append(path)
+    return weights
+
+
+def search_for_model_paths(
+    root: str | Path = ".",
+    external_model_dirs: Sequence[str | Path] | None = None,
+) -> list[tuple[Path, int]]:
+    """Find model-path references without printing source-line contents.
+
+    GGUF weights are also listed from the local model directories and from
+    external model directories. When ``external_model_dirs`` is omitted, the
+    ``AETHER_EXTERNAL_MODEL_DIRS`` environment variable (os.pathsep-separated)
+    and ``/Volumes/*/models`` are checked.
+    """
     scan_root = Path(root).expanduser().resolve()
     if not scan_root.is_dir():
         raise ValueError(f"Scan root is not a directory: {scan_root}")
@@ -200,8 +269,8 @@ def search_for_model_paths(root: str | Path = ".") -> list[tuple[Path, int]]:
             ):
                 continue
             try:
-                with path.open(encoding="utf-8") as source:
-                    for line_number, line in enumerate(source, start=1):
+                with path.open(encoding="utf-8") as source_file:
+                    for line_number, line in enumerate(source_file, start=1):
                         if _MODEL_PATH_PATTERN.search(line):
                             matches.append((path.relative_to(scan_root), line_number))
             except (OSError, UnicodeError) as error:
@@ -225,6 +294,19 @@ def search_for_model_paths(root: str | Path = ".") -> list[tuple[Path, int]]:
         print("Model directories found: " + ", ".join(existing_directories))
     else:
         print("No common local model directories found.")
+
+    weight_sources = [scan_root / name for name in existing_directories]
+    weight_sources.extend(_external_model_directories(external_model_dirs))
+    found_weights = False
+    for source in weight_sources:
+        weights = _find_gguf_weights(source)
+        if weights:
+            found_weights = True
+            print(f"GGUF weights in {source}:")
+            for weight in weights:
+                print(f"  {weight.relative_to(source)} ({weight.stat().st_size} bytes)")
+    if not found_weights:
+        print("No GGUF weights found in local or external model directories.")
     return matches
 
 

@@ -1,0 +1,87 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Copernicus &amp; Observatory</title>
+  <link rel="stylesheet" href="/weather.css">
+  <script src="/weather.js" defer></script>
+  <!--COPERNICUS_SCRIPT-->
+</head>
+<body data-copernicus="true">
+  <div class="app-shell">
+    <header class="matrix-brand">
+      <p class="brand-eyebrow">Independent companion</p>
+      <h1>Copernicus</h1>
+      <p class="meta">Matrix-inspired and independently operated.</p>
+      <p class="meta">Matrix data and controls are not connected.</p>
+    </header>
+    <nav class="shell-tabs" role="tablist" aria-label="Copernicus and observatory views">
+      <button type="button" id="copernicus-tab" role="tab" aria-selected="true"
+        aria-controls="copernicus-panel">Copernicus</button>
+      <button type="button" id="weather-tab" role="tab" aria-selected="false"
+        aria-controls="weather-panel" tabindex="-1">Weather</button>
+      <button type="button" id="stargazer-tab" role="tab" aria-selected="false"
+        aria-controls="stargazer-panel" tabindex="-1">Stargazer</button>
+    </nav>
+    <section class="shell" id="copernicus-panel" role="tabpanel" aria-labelledby="copernicus-tab">
+      <h1>Copernicus</h1>
+      <p class="meta">A local companion. Your current message and latest cloud-cover
+        reading may be sent to Ollama; conversations are not saved and do not access
+        Matrix data or controls.</p>
+      <p id="copernicus-status" class="meta" role="status">Checking local model configuration...</p>
+      <p id="copernicus-error" class="error" role="alert" hidden></p>
+      <div id="copernicus-messages" class="copernicus-messages" role="log" aria-live="polite">
+        <p><strong>Copernicus:</strong> I’m your personal companion. What would you like to explore?</p>
+      </div>
+      <form id="copernicus-form" class="copernicus-form">
+        <label for="copernicus-message">Message to Copernicus</label>
+        <textarea id="copernicus-message" maxlength="4000" rows="3" required></textarea>
+        <button type="submit" id="copernicus-send">Send</button>
+      </form>
+      <p class="meta">Replies may be incorrect. Chat is not persisted and clears on reload.</p>
+    </section>
+  <main class="shell" id="weather-panel" role="tabpanel" aria-labelledby="weather-tab" hidden>
+    <header class="header">
+      <div>
+        <h2 id="city-title">Upland, CA</h2>
+        <div class="meta" id="sync-time" role="status">Initializing weather connection...</div>
+      </div>
+      <div class="status-badge">
+        <span class="dot offline" id="status-dot" aria-hidden="true"></span>
+        <span id="status-text">CONNECTING</span>
+      </div>
+    </header>
+    <form class="search-bar" id="search-form">
+      <label class="sr-only" for="city-input">City name</label>
+      <input type="text" id="city-input" maxlength="200" required
+        placeholder="Search any city worldwide (e.g., Tokyo, London, New York)...">
+      <button type="submit" id="sync-button">Sync</button>
+    </form>
+    <p class="error" id="weather-error" role="alert" hidden></p>
+    <section class="current-panel" aria-label="Current weather">
+      <div>
+        <div class="temp-main" id="current-temp">--&deg;F</div>
+        <div class="meta" id="current-cond">Connecting to Open-Meteo...</div>
+      </div>
+      <div class="wind-panel">
+        <div id="wind-speed">Wind: -- mph</div>
+        <div class="meta" id="humidity">Humidity: --%</div>
+        <div class="meta" id="cloud-cover">Cloud cover: --%</div>
+      </div>
+    </section>
+    <section class="forecast-grid" id="forecast-grid" aria-label="Five-day forecast"></section>
+    <footer class="meta">
+      Weather data: <a href="https://open-meteo.com/" target="_blank" rel="noopener noreferrer">Open-Meteo</a>.
+      No affiliation with or endorsement by Open-Meteo is implied.
+      Refreshes every five minutes. Offline readings, when available, are stale
+      values from the last successful request, not simulated weather.
+    </footer>
+  </main>
+    <section id="stargazer-panel" role="tabpanel" aria-labelledby="stargazer-tab" hidden>
+      <iframe id="stargazer-frame" data-src="/stargazer"
+        title="Cosmic Stargazer"></iframe>
+    </section>
+  </div>
+</body>
+</html>
