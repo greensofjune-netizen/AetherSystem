@@ -2,8 +2,10 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Copernicus &amp; Observatory</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#120b07">
+  <meta name="description" content="A private, locally powered chat companion with weather and astronomy tools.">
+  <title>Copernicus &amp; Observatory | AetherSystem</title>
   <link rel="stylesheet" href="/weather.css">
   <script src="/weather.js" defer></script>
   <!--COPERNICUS_SCRIPT-->
@@ -24,24 +26,59 @@
       <button type="button" id="stargazer-tab" role="tab" aria-selected="false"
         aria-controls="stargazer-panel" tabindex="-1">Stargazer</button>
     </nav>
-    <section class="shell" id="copernicus-panel" role="tabpanel" aria-labelledby="copernicus-tab">
-      <h1>Copernicus</h1>
-      <p class="meta">A local companion. Your current message and latest cloud-cover
-        reading may be sent to Ollama; conversations are not saved and do not access
-        Matrix data or controls.</p>
+    <section class="shell chat-shell" id="copernicus-panel" role="tabpanel"
+      aria-labelledby="copernicus-tab" tabindex="0">
+      <header class="chat-header">
+        <div>
+          <p class="brand-eyebrow">Local AI companion</p>
+          <h2>Copernicus</h2>
+          <p class="meta">A thoughtful space to ask, explore, and create.</p>
+        </div>
+        <button type="button" class="secondary-button" id="copernicus-new-chat">New chat</button>
+      </header>
+      <p class="privacy-note">Runs on the configured local Ollama model. This chat stays
+        in this tab, is not saved, and shares up to 6 recent turns for context.
+        No Matrix data or controls are connected.</p>
       <p id="copernicus-status" class="meta" role="status">Checking local model configuration...</p>
       <p id="copernicus-error" class="error" role="alert" hidden></p>
-      <div id="copernicus-messages" class="copernicus-messages" role="log" aria-live="polite">
-        <p><strong>Copernicus:</strong> I’m your personal companion. What would you like to explore?</p>
+      <div id="copernicus-messages" class="copernicus-messages" role="log"
+        aria-label="Conversation" aria-live="polite" aria-relevant="additions text">
+        <article class="chat-message assistant-message">
+          <p class="message-author">Copernicus</p>
+          <p class="message-content">I’m your personal companion. What would you like to explore?</p>
+        </article>
+      </div>
+      <div class="prompt-suggestions" aria-label="Suggested prompts">
+        <button type="button" class="suggestion-button" data-prompt="Help me understand a new idea">Explore an idea</button>
+        <button type="button" class="suggestion-button" data-prompt="Help me plan a project, one step at a time">Plan a project</button>
+        <button type="button" class="suggestion-button" data-prompt="What can you tell me about the night sky?">Explore the sky</button>
       </div>
       <form id="copernicus-form" class="copernicus-form">
         <label for="copernicus-message">Message to Copernicus</label>
-        <textarea id="copernicus-message" maxlength="4000" rows="3" required></textarea>
-        <button type="submit" id="copernicus-send">Send</button>
+        <textarea id="copernicus-message" maxlength="4000" rows="3" required
+          placeholder="Ask a question or share what you’re thinking…"
+          aria-describedby="copernicus-composer-hint copernicus-character-count"></textarea>
+        <div class="composer-meta">
+          <span id="copernicus-composer-hint">Enter to send · Shift + Enter for a new line</span>
+          <span id="copernicus-character-count" aria-live="polite">0 / 4000</span>
+        </div>
+        <div class="copernicus-media">
+          <label class="secondary-button file-picker">Attach images
+            <input id="copernicus-images" class="visually-hidden-file" type="file"
+              accept="image/jpeg,image/png,image/webp" multiple
+              aria-describedby="copernicus-image-hint">
+          </label>
+          <span id="copernicus-image-hint">Up to 4 images, 2 MB each.</span>
+          <span id="copernicus-image-count" role="status" aria-live="polite"></span>
+          <ul id="copernicus-selected-images" aria-label="Selected image attachments"></ul>
+          <button type="button" id="copernicus-voice" class="secondary-button">Start voice input</button>
+          <span id="copernicus-voice-status" role="status" aria-live="polite"></span>
+          <button type="submit" id="copernicus-send" disabled>Send</button>
+        </div>
       </form>
-      <p class="meta">Replies may be incorrect. Chat is not persisted and clears on reload.</p>
+      <p class="meta safety-note">AI responses can be inaccurate. Check important information with trusted sources.</p>
     </section>
-  <main class="shell" id="weather-panel" role="tabpanel" aria-labelledby="weather-tab" hidden>
+  <main class="shell" id="weather-panel" role="tabpanel" aria-labelledby="weather-tab" tabindex="0" hidden>
     <header class="header">
       <div>
         <h2 id="city-title">Upland, CA</h2>
@@ -78,7 +115,7 @@
       values from the last successful request, not simulated weather.
     </footer>
   </main>
-    <section id="stargazer-panel" role="tabpanel" aria-labelledby="stargazer-tab" hidden>
+    <section id="stargazer-panel" role="tabpanel" aria-labelledby="stargazer-tab" tabindex="0" hidden>
       <iframe id="stargazer-frame" data-src="/stargazer"
         title="Cosmic Stargazer"></iframe>
     </section>

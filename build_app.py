@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import argparse
 import platform
 import subprocess
 import sys
@@ -87,5 +88,13 @@ def run_cookie_cutter_build() -> int:
     return 0
 
 
+def main() -> int:
+    parser = argparse.ArgumentParser(
+        description="Build the Aether Engine standalone executable."
+    )
+    parser.parse_args()
+    return run_cookie_cutter_build()
+
+
 if __name__ == "__main__":
-    raise SystemExit(run_cookie_cutter_build())
+    raise SystemExit(main())

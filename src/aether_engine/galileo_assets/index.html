@@ -1,0 +1,295 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="dark">
+  <title>Galileo</title>
+  <link rel="stylesheet" href="/galileo.css">
+  <link rel="stylesheet" href="/multimodal.css">
+  <link rel="stylesheet" href="/astrology.css">
+  <link rel="stylesheet" href="/formulas.css">
+  <link rel="stylesheet" href="/workspace.css">
+  <link rel="stylesheet" href="/perception.css">
+  <script src="/speech.js" defer></script>
+  <script src="/galileo.js" defer></script>
+  <script src="/astrology.js" defer></script>
+  <script src="/formulas.js" defer></script>
+  <script src="/workspace.js" defer></script>
+  <script src="/perception.js" defer></script>
+</head>
+<body>
+  <div class="app-shell">
+    <aside class="sidebar" aria-label="Chat sidebar">
+      <div class="brand"><span class="brand-mark" aria-hidden="true">✦</span><div><strong>GALILEO</strong><small>LOCAL INTELLIGENCE</small></div></div>
+      <button class="new-chat" id="new-chat" type="button"><span aria-hidden="true">＋</span> New chat</button>
+      <div class="sidebar-heading"><span>YOUR CONVERSATIONS</span><span class="heading-line"></span></div>
+      <nav class="conversation-list" id="conversation-list" aria-label="Saved conversations"><p class="sidebar-hint">No saved conversations yet.</p></nav>
+      <div class="sidebar-footer"><span class="footer-orbit" aria-hidden="true">◉</span><div><strong>YOUR SPACE, YOUR DATA</strong><small>Built for quiet discovery.</small></div></div>
+    </aside>
+    <main class="main">
+      <header class="topbar">
+        <div class="topbar-title"><span class="eyebrow">AETHER / GALILEO</span><h1>Explore with clarity<span>.</span></h1></div>
+        <div class="connection"><span id="connection-dot" class="status-dot" aria-hidden="true"></span><span id="connection-status" role="status" aria-live="polite">Checking connection</span><button id="refresh" class="icon-button" type="button" aria-label="Refresh connection and data" title="Refresh connection and data">↻</button></div>
+      </header>
+      <div class="workspace">
+        <nav class="tabs" aria-label="Galileo spaces">
+          <button type="button" class="tab active" data-tab="chat" aria-current="page">Chat</button>
+          <button type="button" class="tab" data-tab="weather">Weather <span aria-hidden="true">↗</span></button>
+          <button type="button" class="tab" data-tab="stargazer">Stargazer <span aria-hidden="true">✧</span></button>
+          <button type="button" class="tab" data-tab="astrology">Astrology <span aria-hidden="true">☉</span></button>
+          <button type="button" class="tab" data-tab="formula">Formula Lab</button>
+          <button type="button" class="tab" data-tab="workspace">Workspace import</button>
+          <button type="button" class="tab" data-tab="propulsion">Propulsion</button>
+          <button type="button" class="tab" data-tab="perception">Camera</button>
+          <button type="button" class="tab" data-tab="matrix">Matrix actions</button>
+        </nav>
+        <section id="chat-panel" class="panel chat-panel" aria-label="Chat">
+          <div class="chat-meta"><div><span class="eyebrow">YOUR LOCAL COMPANION</span><h2 id="chat-title">A little more clarity.</h2><p id="model-status" class="model-status" role="status">Loading the local model…</p></div><div class="model-field"><label for="model">INSTALLED LOCAL MODEL</label><select id="model" disabled><option value="">Loading models…</option></select></div></div>
+          <p class="privacy-note"><span aria-hidden="true">✧</span> Chat history and selected text/images are saved locally and sent only to local Ollama. Native voice stays on-device; browser voice may use your browser vendor's speech service. Matrix actions require separate manual confirmation; the model cannot execute them.</p>
+          <div id="messages" class="messages" aria-live="polite" aria-label="Conversation messages"><div class="empty-state"><div class="empty-symbol" aria-hidden="true">✦</div><h3>Where shall we begin?</h3><p>Bring a question, an idea, or a little curiosity.</p></div></div>
+          <div class="composer-wrap">
+            <div id="chat-error" class="alert" role="alert" hidden></div>
+            <div id="attachment-error" class="alert" role="alert" hidden></div>
+            <button id="clear-invalid-files" class="clear-invalid" type="button" hidden>Clear unaccepted selection</button>
+            <ul id="attachments" class="attachments" aria-label="Selected attachments"></ul>
+            <form id="chat-form" class="composer" aria-label="Send a chat message">
+              <label class="sr-only" for="message">Message Galileo</label>
+              <textarea id="message" name="message" rows="2" required aria-describedby="message-count chat-progress" placeholder="Ask anything, explore everything…"></textarea>
+              <div class="attachment-hint" id="message-count">0 / 8,000 characters</div>
+              <div class="composer-actions"><div>
+                <label class="attach-button" for="files"><span aria-hidden="true">＋</span> Attach text</label>
+                <input id="files" type="file" multiple accept=".txt,.md,.py,.js,.ts,.json,.csv,.log,.html,.css,.yaml,.yml,.toml">
+                <span class="attachment-hint">Text · up to 10 files, 60,000 bytes each.</span>
+                <label id="image-label" class="attach-button" for="images" aria-disabled="true"><span aria-hidden="true">▧</span> Add images</label>
+                <input id="images" type="file" multiple accept="image/jpeg,image/png,image/webp">
+                <span id="image-hint" class="attachment-hint">Select a model with vision support to attach images.</span>
+                <button id="voice-input" class="voice-button" type="button">Start voice input</button>
+                <button id="native-voice-input" class="voice-button" type="button" hidden>Start on-device voice</button>
+                <button id="stop-speaking" class="voice-button" type="button">Stop reading aloud</button>
+                <span id="voice-status" class="attachment-hint" role="status" aria-live="polite"></span>
+              </div><div class="send-actions"><button id="retry" class="voice-button" type="button" hidden>Retry draft</button><button id="stop-response" class="voice-button" type="button" hidden>Stop response</button><button id="send" class="send-button" type="submit">Send <span aria-hidden="true">↑</span></button></div></div>
+            </form>
+            <p id="chat-progress" class="attachment-hint" role="status" aria-live="polite">Enter to send · Shift+Enter for a new line.</p>
+            <p class="composer-footnote">GALILEO CAN MAKE MISTAKES. CHECK IMPORTANT DETAILS.</p>
+          </div>
+        </section>
+        <section id="matrix-panel" class="panel module-panel" aria-labelledby="matrix-heading" hidden>
+          <h2 id="matrix-heading">Matrix actions</h2>
+          <p>Automator is the Matrix's macOS action adapter. Only the buttons below can request actions; chat responses cannot run commands.</p>
+          <p id="matrix-status" role="status">Desktop actions are available only in the native Galileo app.</p>
+          <p>Each action opens a macOS confirmation dialog. Matrix records action name, outcome, duration, and model—not prompts, responses, or backup contents.</p>
+          <div class="matrix-actions">
+            <button id="matrix-test" class="voice-button" type="button" disabled>Run project tests…</button>
+            <button id="matrix-backup" class="voice-button" type="button" disabled>Back up local data…</button>
+          </div>
+          <p id="matrix-result" role="status" aria-live="polite"></p>
+        </section>
+        <section id="weather-panel" class="panel module-panel" aria-label="Weather" hidden><div class="module-heading"><div><span class="eyebrow">LOOK OUTSIDE</span><h2>Weather</h2><p>Weather information requires an internet connection.</p></div><span aria-hidden="true">☼</span></div><iframe id="weather-frame" title="Weather" loading="lazy"></iframe></section>
+        <section id="stargazer-panel" class="panel module-panel" aria-label="Stargazer" hidden><div class="module-heading"><div><span class="eyebrow">LOOK UP</span><h2>Stargazer</h2><p>Stargazer is illustrative, not a live sky map.</p></div><span aria-hidden="true">✧</span></div><iframe id="stargazer-frame" title="Stargazer" loading="lazy"></iframe></section>
+        <section id="propulsion-panel" class="panel astrology-panel" aria-labelledby="propulsion-heading" hidden>
+          <header class="astrology-heading"><div><span class="eyebrow">LOCAL REFERENCE LIBRARY</span><h2 id="propulsion-heading">Propulsion archive</h2></div></header>
+          <p>Historical references are separate from illustrative specifications. Check each cited source; unsourced records are not verified.</p>
+          <search>
+            <form id="propulsion-search" action="/api/propulsion/references" method="get" aria-label="Search propulsion references">
+              <label for="propulsion-query">Search references</label>
+              <input id="propulsion-query" name="q" type="search" maxlength="200" autocorrect="off" autocapitalize="none" spellcheck="false">
+              <button type="submit">Search</button>
+            </form>
+          </search>
+          <p id="propulsion-status" role="status"></p>
+          <ul id="propulsion-results"></ul>
+          <h3>Historical connections</h3>
+          <ul id="propulsion-lineage"></ul>
+        </section>
+        <section id="perception-panel" class="panel perception-panel" aria-labelledby="perception-heading" hidden>
+          <h2 id="perception-heading">Camera observations</h2>
+          <p>Camera access starts only when you choose. While active, snapshots are sent to local Qwen through Ollama for periodic descriptions; they are not saved to chat or the archive. Stop or leave this panel to turn the camera off. Observations can be wrong or delayed and are not safety monitoring. Galileo cannot control devices.</p>
+          <div class="perception-actions">
+            <button type="button" id="camera-start">Start camera and observations</button>
+            <button type="button" id="camera-stop" disabled>Stop camera</button>
+          </div>
+          <p id="camera-status" role="status">Camera off.</p>
+          <video id="camera-preview" autoplay muted playsinline aria-label="Live camera preview"></video>
+          <h3>Latest observation</h3>
+          <p id="camera-observation">No observation yet.</p>
+          <h3>Saved preferences</h3>
+          <p>Only text you explicitly save here is retained locally and supplied to future camera observations. It does not retrain the model.</p>
+          <form id="camera-feedback-form" aria-label="Save observation preference">
+            <label for="camera-feedback">Preference or correction</label>
+            <textarea id="camera-feedback" name="content" maxlength="500" required></textarea>
+            <button type="submit">Save preference</button>
+          </form>
+          <p id="camera-feedback-status" role="status"></p>
+          <ul id="camera-feedback-list"></ul>
+        </section>
+        <section id="astrology-panel" class="panel astrology-panel" aria-labelledby="astrology-heading" hidden>
+          <header class="astrology-heading">
+            <div><span class="eyebrow">A PERSONAL SKY MAP</span><h2 id="astrology-heading">Astrology &amp; numerology</h2></div>
+            <p>Explore a tropical natal chart with whole-sign houses and Pythagorean core numbers.</p>
+          </header>
+          <p class="astrology-privacy"><strong>Your details stay on this device.</strong> Birth data is sent only to Galileo on your computer to calculate this chart. It is not saved to chat history, Historian, or a profile, and is not sent to a geocoder or other service. Astrology and numerology are interpretive traditions, not evidence-based predictions.</p>
+          <form id="astrology-form" class="astrology-form" action="/api/astrology/chart" method="post" aria-labelledby="astrology-heading">
+            <fieldset>
+              <legend>Birth details</legend>
+              <div class="astro-fields">
+                <div class="astro-field astro-name"><label for="birth-name">Full name at birth</label><input id="birth-name" name="name" type="text" maxlength="120" autocomplete="name" required aria-describedby="birth-name-help"><small id="birth-name-help">Used only to calculate name-based numerology.</small></div>
+                <div class="astro-field"><label for="birth-date">Birth date</label><input id="birth-date" name="birth_date" type="date" min="1800-01-01" max="2200-12-31" required></div>
+                <div class="astro-field"><label for="birth-time">Local birth time</label><input id="birth-time" name="birth_time" type="time" step="60" required><small>Use the clock time recorded at birth.</small></div>
+                <div class="astro-field"><label for="birth-fold">Repeated time occurrence</label><select id="birth-fold" name="fold"><option value="0">First occurrence</option><option value="1">Second occurrence</option></select><small>Only matters if clocks repeated this time during a time-zone change.</small></div>
+              </div>
+            </fieldset>
+            <fieldset>
+              <legend>Birth location</legend>
+              <div class="astro-fields">
+                <div class="astro-field"><label for="birth-timezone">IANA time zone</label><input id="birth-timezone" name="timezone" type="text" maxlength="80" placeholder="America/Los_Angeles" autocapitalize="none" spellcheck="false" required aria-describedby="birth-timezone-help"><small id="birth-timezone-help">For example, America/Los_Angeles or Europe/London.</small></div>
+                <div class="astro-field"><label for="birth-latitude">Latitude</label><input id="birth-latitude" name="latitude" type="number" min="-90" max="90" step="any" placeholder="37.7749" required></div>
+                <div class="astro-field"><label for="birth-longitude">Longitude</label><input id="birth-longitude" name="longitude" type="number" min="-180" max="180" step="any" placeholder="-122.4194" required></div>
+              </div>
+              <p class="astro-location-help">Enter coordinates in decimal degrees (north/east positive). Galileo does not look up or transmit birthplace names.</p>
+            </fieldset>
+            <div class="astrology-actions"><button class="astro-submit" type="submit">Calculate chart</button><button id="astrology-clear" class="astro-clear" type="button">Clear birth details</button></div>
+          </form>
+          <p id="astrology-error" class="alert" role="alert" tabindex="-1" hidden></p>
+          <p id="astrology-status" class="astrology-status" role="status" aria-live="polite"></p>
+          <section id="astrology-result" class="astrology-result" aria-label="Natal chart results" hidden>
+            <div class="astro-summary" aria-label="Sun, moon, and rising signs"></div>
+            <div class="astro-result-grid">
+              <figure class="chart-card"><figcaption><span class="eyebrow">NATAL WHEEL</span><h3>Tropical · Whole Sign</h3></figcaption><svg id="astrology-wheel" viewBox="0 0 360 360" role="img"></svg><p class="chart-caption">Planet glyphs show their zodiac positions; the table below gives exact signs, degrees, and houses.</p></figure>
+              <div class="chart-card planetary-card"><span class="eyebrow">PLANETARY POSITIONS</span><h3>Your placements</h3><div class="astro-table-wrap"><table class="astro-table"><caption class="sr-only">Planet signs, degrees, and whole-sign houses</caption><thead><tr><th scope="col">Body</th><th scope="col">Sign</th><th scope="col">Degree</th><th scope="col">House</th></tr></thead><tbody id="astrology-planets"></tbody></table></div></div>
+              <div class="chart-card houses-card"><span class="eyebrow">WHOLE-SIGN HOUSES</span><h3>House signs</h3><ol id="astrology-houses" class="house-list"></ol></div>
+              <div class="chart-card numerology-card"><span class="eyebrow">PYTHAGOREAN NUMEROLOGY</span><h3>Core numbers</h3><dl id="astrology-numbers" class="number-list"></dl><p class="number-note">Master numbers 11, 22, and 33 are preserved. Y is counted as a consonant.</p></div>
+            </div>
+          </section>
+        </section>
+        <section id="formula-panel" class="panel formula-panel" aria-labelledby="formula-heading" hidden>
+          <header class="astrology-heading">
+            <div><span class="eyebrow">LOCAL CALCULATION TOOLS</span><h2 id="formula-heading">Formula Lab</h2></div>
+            <p>Run the project's existing models with your inputs. Results stay in this session and are not saved.</p>
+          </header>
+          <p class="formula-notice"><strong>Model limits:</strong> The state-vector circuit tool performs exact small-circuit math and seeded sampling; it does not model hardware noise or represent a real quantum device. It is capped at 12 qubits. The legacy scalar index is illustrative. The spin-network result is a seeded toy model. The radio link estimate does not include terrain, buildings, weather, antenna patterns, or measured signal strength.</p>
+          <div class="formula-grid">
+            <article class="formula-card formula-card-wide" aria-labelledby="quantum-circuit-heading">
+              <span class="eyebrow">STATE-VECTOR SIMULATION</span>
+              <h3 id="quantum-circuit-heading">Quantum circuit</h3>
+              <p>Apply H, X, Y, Z, S, T, RX, RY, RZ, CNOT, and CZ gates to an initial |0…0⟩ state. Qubit 0 is the least-significant bit; state labels are shown most-significant bit first.</p>
+              <form id="quantum-circuit-form" action="/api/formulas/quantum-circuit" method="post" aria-labelledby="quantum-circuit-heading">
+                <fieldset>
+                  <legend>Circuit and sampling inputs</legend>
+                  <div class="formula-fields">
+                    <div class="formula-field"><label for="circuit-qubits">Qubits (1–12)</label><input id="circuit-qubits" name="num_qubits" type="number" min="1" max="12" step="1" value="2" required></div>
+                    <div class="formula-field"><label for="circuit-shots">Measurement shots (1–10,000)</label><input id="circuit-shots" name="shots" type="number" min="1" max="10000" step="1" value="1000" required></div>
+                    <div class="formula-field"><label for="circuit-seed">Reproducible seed</label><input id="circuit-seed" name="seed" type="number" min="0" max="4294967295" step="1" value="0" required></div>
+                    <div class="formula-field formula-field-full"><label for="circuit-gates">Gate sequence (JSON, maximum 256)</label><textarea id="circuit-gates" name="gates" rows="6" spellcheck="false" aria-describedby="circuit-gates-hint" required>[
+  {"operation": "H", "target": 0},
+  {"operation": "CNOT", "target": 1, "control": 0}
+]</textarea><small id="circuit-gates-hint">Rotation gates require an angle in radians. Controlled gates require a distinct control qubit. Results show the full state vector in the API and top states here.</small></div>
+                  </div>
+                </fieldset>
+                <button class="formula-submit" type="submit">Simulate circuit</button>
+              </form>
+              <p id="circuit-error" class="formula-error" role="alert" tabindex="-1" hidden></p>
+              <p id="circuit-status" class="formula-status" role="status" aria-live="polite"></p>
+              <pre id="circuit-result" class="formula-circuit-result" hidden tabindex="0" aria-label="Circuit simulation results"></pre>
+            </article>
+            <article class="formula-card" aria-labelledby="quantum-formula-heading">
+              <span class="eyebrow">ILLUSTRATIVE LEGACY METRIC</span>
+              <h3 id="quantum-formula-heading">Coherence &amp; entropy index</h3>
+              <p>This separate toy index is not derived from the state-vector circuit. Coherence = 100 × (1 − risk); entropy = min(100, 0.5 × density + 0.77 × velocity). Entropy above 95 is rejected.</p>
+              <form id="quantum-form" action="/api/formulas/quantum" method="post" aria-labelledby="quantum-formula-heading">
+                <fieldset>
+                  <legend>Model inputs</legend>
+                  <div class="formula-fields">
+                    <div class="formula-field"><label for="quantum-risk">Risk coefficient (0–1)</label><input id="quantum-risk" name="risk_coefficient" type="number" min="0" max="1" step="any" value="0.3" required></div>
+                    <div class="formula-field"><label for="quantum-velocity">Fluctuation velocity (Hz)</label><input id="quantum-velocity" name="fluctuation_velocity" type="number" min="0" step="any" value="50" required></div>
+                    <div class="formula-field"><label for="quantum-density">State density</label><input id="quantum-density" name="state_density" type="number" min="0" step="any" value="57" required></div>
+                  </div>
+                </fieldset>
+                <button class="formula-submit" type="submit">Calculate coherence and entropy</button>
+              </form>
+              <p id="quantum-error" class="formula-error" role="alert" tabindex="-1" hidden></p>
+              <p id="quantum-status" class="formula-status" role="status" aria-live="polite"></p>
+              <dl id="quantum-result" class="formula-result" hidden></dl>
+            </article>
+            <article class="formula-card" aria-labelledby="spin-formula-heading">
+              <span class="eyebrow">SEEDED SPIN NETWORK</span>
+              <h3 id="spin-formula-heading">Boundary area &amp; entropy</h3>
+              <p>Area = 8πγ Σ√(j(j + 1)), γ = 0.2375; entropy = area ÷ 4. A fixed seed reproduces the same sampled spins.</p>
+              <form id="spin-form" action="/api/formulas/spin-network" method="post" aria-labelledby="spin-formula-heading">
+                <fieldset>
+                  <legend>Sampling inputs</legend>
+                  <div class="formula-fields">
+                    <div class="formula-field"><label for="spin-links">Boundary links (1–10,000)</label><input id="spin-links" name="num_links" type="number" min="1" max="10000" step="1" value="30" required></div>
+                    <div class="formula-field"><label for="spin-seed">Random seed</label><input id="spin-seed" name="seed" type="number" min="0" max="4294967295" step="1" value="42" required></div>
+                  </div>
+                </fieldset>
+                <button class="formula-submit" type="submit">Calculate boundary</button>
+              </form>
+              <p id="spin-error" class="formula-error" role="alert" tabindex="-1" hidden></p>
+              <p id="spin-status" class="formula-status" role="status" aria-live="polite"></p>
+              <dl id="spin-result" class="formula-result" hidden></dl>
+            </article>
+            <article class="formula-card formula-card-wide" aria-labelledby="los-formula-heading">
+              <span class="eyebrow">RADIO PATH ESTIMATE</span>
+              <h3 id="los-formula-heading">Line of sight &amp; Fresnel clearance</h3>
+              <p>Uses a 4/3-Earth horizon model, midpoint Earth bulge, 60% first Fresnel-zone clearance, and free-space path loss. This is a geometric estimate, not a terrain survey or guaranteed RF link.</p>
+              <form id="los-form" action="/api/formulas/los-link" method="post" aria-labelledby="los-formula-heading">
+                <fieldset>
+                  <legend>Transmitter, receiver, and frequency</legend>
+                  <div class="formula-fields formula-fields-los">
+                    <div class="formula-field"><label for="los-tx-lat">Transmitter latitude (°)</label><input id="los-tx-lat" name="tx_lat" type="number" min="-90" max="90" step="any" value="34.0975" required></div>
+                    <div class="formula-field"><label for="los-tx-lon">Transmitter longitude (°)</label><input id="los-tx-lon" name="tx_lon" type="number" min="-180" max="180" step="any" value="-117.6484" required></div>
+                    <div class="formula-field"><label for="los-tx-height">Transmitter antenna height (m)</label><input id="los-tx-height" name="tx_height_m" type="number" min="0" step="any" value="10" required></div>
+                    <div class="formula-field"><label for="los-rx-lat">Receiver latitude (°)</label><input id="los-rx-lat" name="rx_lat" type="number" min="-90" max="90" step="any" value="34.1" required></div>
+                    <div class="formula-field"><label for="los-rx-lon">Receiver longitude (°)</label><input id="los-rx-lon" name="rx_lon" type="number" min="-180" max="180" step="any" value="-117.64" required></div>
+                    <div class="formula-field"><label for="los-rx-height">Receiver antenna height (m)</label><input id="los-rx-height" name="rx_height_m" type="number" min="0" step="any" value="10" required></div>
+                    <div class="formula-field"><label for="los-frequency">Frequency (GHz)</label><input id="los-frequency" name="freq_ghz" type="number" min="0.000001" step="any" value="5.8" required></div>
+                  </div>
+                </fieldset>
+                <button class="formula-submit" type="submit">Estimate radio path</button>
+              </form>
+              <p id="los-error" class="formula-error" role="alert" tabindex="-1" hidden></p>
+              <p id="los-status" class="formula-status" role="status" aria-live="polite"></p>
+              <dl id="los-result" class="formula-result" hidden></dl>
+            </article>
+          </div>
+          <p class="formula-existing">Other calculation screens: <strong>Stargazer</strong> for local visible-star positions and <strong>Astrology</strong> for tropical chart and Pythagorean numerology. These are separate tools; their scientific and interpretive limitations are described on their screens.</p>
+        </section>
+        <section id="workspace-panel" class="panel workspace-panel" aria-labelledby="workspace-heading" hidden>
+          <header class="workspace-heading">
+            <div><span class="eyebrow">LOCAL-ONLY DATA BRIDGE</span><h2 id="workspace-heading">Workspace import</h2></div>
+            <p>Paste or select a JSON array of records. Nothing is sent to Google or Cloudflare.</p>
+          </header>
+          <p class="workspace-notice"><strong>Review before importing:</strong> only the record ID and summary are retained. Unmapped fields are discarded. Cleared summaries are stored in the local Aether event database; blocked records are not stored. The keyword filter is a heuristic, not a privacy or safety guarantee.</p>
+          <div class="workspace-import-card">
+            <label for="workspace-json">Workspace records (JSON array)</label>
+            <textarea id="workspace-json" rows="12" spellcheck="false" aria-describedby="workspace-json-hint workspace-byte-count" placeholder='[{"id":"cal_123","summary":"Team planning","description":"Optional text"}]'></textarea>
+            <div class="workspace-input-meta">
+              <span id="workspace-json-hint">Up to 100 records and 1.5 MB. Review sensitive content before import.</span>
+              <span id="workspace-byte-count">0 / 1,500,000 bytes</span>
+            </div>
+            <div class="workspace-controls">
+              <label class="workspace-file-label" for="workspace-file">Choose JSON file</label>
+              <input id="workspace-file" type="file" accept=".json,application/json">
+              <button id="workspace-preview" class="formula-submit" type="button">Preview only</button>
+              <button id="workspace-import" class="formula-submit" type="button">Import cleared records</button>
+              <button id="workspace-clear" class="workspace-clear" type="button">Clear</button>
+            </div>
+          </div>
+          <p id="workspace-status" class="workspace-status" role="status" aria-live="polite"></p>
+          <div id="workspace-results" class="workspace-results" aria-live="polite" hidden>
+            <h3 id="workspace-result-heading"></h3>
+            <div class="workspace-table-wrap">
+              <table>
+                <caption class="sr-only">Sanitized Workspace import outcomes</caption>
+                <thead><tr><th scope="col">Outcome</th><th scope="col">Sanitized ID</th><th scope="col">Summary</th></tr></thead>
+                <tbody id="workspace-result-rows"></tbody>
+              </table>
+            </div>
+          </div>
+        </section>
+      </div>
+    </main>
+  </div>
+</body>
+</html>

@@ -1,0 +1,45 @@
+{
+  "$schema": "https://json-schema.org",
+  "title": "AetherUnifiedEnvelope",
+  "type": "object",
+  "required": [
+    "protocol_version",
+    "source_lang",
+    "node",
+    "event",
+    "timestamp",
+    "payload"
+  ],
+  "additionalProperties": false,
+  "properties": {
+    "protocol_version": {
+      "type": "string",
+      "const": "1.0.0"
+    },
+    "source_lang": {
+      "type": "string",
+      "enum": ["python", "js", "cpp", "rust", "go", "swift", "shell"],
+      "description": "python | js | cpp | rust | go | swift | shell"
+    },
+    "node": {
+      "type": "string",
+      "enum": ["COPERNICUS", "HISTORIAN", "MATRIX", "ATLAS"],
+      "description": "COPERNICUS | HISTORIAN | MATRIX | ATLAS"
+    },
+    "event": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 64,
+      "pattern": "^[A-Z][A-Z0-9_]*$"
+    },
+    "timestamp": {
+      "type": "number",
+      "minimum": 0
+    },
+    "payload": {
+      "type": "object",
+      "maxProperties": 64,
+      "description": "JSON object; the complete serialized envelope is limited to 32 KiB."
+    }
+  }
+}

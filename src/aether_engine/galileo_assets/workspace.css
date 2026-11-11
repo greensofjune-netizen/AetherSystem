@@ -1,0 +1,211 @@
+.workspace-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+  overflow: auto;
+  padding-block: 28px;
+}
+
+.workspace-heading {
+  display: flex;
+  align-items: end;
+  justify-content: space-between;
+  gap: 20px;
+}
+
+.workspace-heading h2 {
+  margin: 8px 0 0;
+  font-family: Georgia, serif;
+  font-size: 27px;
+  font-weight: 400;
+}
+
+.workspace-heading p,
+.workspace-notice,
+.workspace-input-meta,
+.workspace-status {
+  color: var(--muted);
+  font-size: 0.875rem;
+  line-height: 1.6;
+}
+
+.workspace-heading p {
+  max-width: 380px;
+  margin: 0;
+}
+
+.workspace-notice {
+  margin: 0;
+  padding: 14px 16px;
+  border: 1px solid #55422c;
+  border-radius: 10px;
+  background: #211a14;
+}
+
+.workspace-notice strong {
+  color: var(--gold);
+}
+
+.workspace-import-card {
+  display: grid;
+  gap: 10px;
+  padding: 18px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: linear-gradient(145deg, #201a15, #171310);
+}
+
+.workspace-import-card > label {
+  color: #e8d2b2;
+  font-size: 0.9rem;
+  font-weight: 600;
+}
+
+#workspace-json {
+  width: 100%;
+  min-height: 180px;
+  resize: vertical;
+  padding: 12px;
+  border: 1px solid #65513d;
+  border-radius: 8px;
+  background: #120f0d;
+  color: var(--text);
+  font: 0.875rem/1.5 ui-monospace, SFMono-Regular, Consolas, monospace;
+}
+
+#workspace-json:focus-visible,
+.workspace-file-label:focus-visible,
+.workspace-clear:focus-visible {
+  outline: 2px solid var(--gold);
+  outline-offset: 3px;
+}
+
+#workspace-json[aria-invalid="true"] {
+  border-color: var(--danger);
+}
+
+.workspace-input-meta {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  font-size: 0.75rem;
+}
+
+.workspace-controls {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+}
+
+.workspace-file-label,
+.workspace-clear {
+  display: inline-flex;
+  min-height: 44px;
+  align-items: center;
+  padding: 10px 14px;
+  border: 1px solid #5b412c;
+  border-radius: 9px;
+  background: #282018;
+  color: #e7d2b6;
+  font-size: 0.875rem;
+  cursor: pointer;
+}
+
+#workspace-file {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+}
+
+#workspace-file:focus-visible + .formula-submit {
+  outline: 2px solid var(--gold);
+  outline-offset: 3px;
+}
+
+.workspace-controls .formula-submit {
+  min-height: 44px;
+  justify-self: auto;
+  margin: 0;
+  cursor: pointer;
+}
+
+.workspace-controls .formula-submit:disabled {
+  cursor: wait;
+}
+
+.workspace-status {
+  min-height: 1.4em;
+  margin: 0;
+}
+
+.workspace-status.workspace-error {
+  color: var(--danger);
+}
+
+.workspace-results {
+  min-width: 0;
+}
+
+.workspace-results h3 {
+  color: #f0dfc7;
+  font-family: Georgia, serif;
+  font-weight: 400;
+}
+
+.workspace-table-wrap {
+  overflow-x: auto;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+}
+
+.workspace-table-wrap table {
+  width: 100%;
+  border-collapse: collapse;
+  text-align: left;
+}
+
+.workspace-table-wrap th,
+.workspace-table-wrap td {
+  padding: 10px 12px;
+  border-bottom: 1px solid var(--line);
+  vertical-align: top;
+  overflow-wrap: anywhere;
+}
+
+.workspace-table-wrap th {
+  color: #e8d2b2;
+  font-size: 0.8rem;
+}
+
+.workspace-table-wrap td {
+  color: #d3c0a5;
+  font-size: 0.875rem;
+}
+
+.workspace-table-wrap tr:last-child td {
+  border-bottom: 0;
+}
+
+.workspace .tabs {
+  overflow-x: auto;
+}
+
+.workspace .tab {
+  flex: 0 0 auto;
+  white-space: nowrap;
+}
+
+@media (max-width: 680px) {
+  .workspace-heading {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .workspace-input-meta {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+}

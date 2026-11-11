@@ -6,11 +6,11 @@ from collections.abc import Sequence
 import numpy as np
 
 
-def calculate_spin_network_boundary(
+def compute_spin_network_boundary(
     num_links: int = 30,
     seed: int = 42,
 ) -> tuple[np.ndarray, float, float]:
-    """Compute quantized area and entropy for randomly selected boundary spins."""
+    """Return seeded boundary spins, quantized area, and entropy without output."""
     if num_links < 1:
         raise ValueError("num_links must be at least 1")
     if seed < 0 or seed > 2**32 - 1:
@@ -23,6 +23,17 @@ def calculate_spin_network_boundary(
     area_quanta = np.sqrt(j_punctures * (j_punctures + 1))
     total_area_planck = float(8 * np.pi * gamma * np.sum(area_quanta))
     entanglement_entropy_nats = total_area_planck / 4.0
+    return j_punctures, total_area_planck, entanglement_entropy_nats
+
+
+def calculate_spin_network_boundary(
+    num_links: int = 30,
+    seed: int = 42,
+) -> tuple[np.ndarray, float, float]:
+    """Compute quantized area and entropy for randomly selected boundary spins."""
+    j_punctures, total_area_planck, entanglement_entropy_nats = (
+        compute_spin_network_boundary(num_links, seed)
+    )
 
     print("=== SYSTEM CORE: SPIN NETWORK QUANTIZATION ===")
     print(f"Total Active Boundary Punctures  : {num_links}")

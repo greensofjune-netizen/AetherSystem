@@ -1,0 +1,17 @@
+.persona-selector {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.6rem 1rem;
+  margin: 1rem 0 0;
+  padding: 0.75rem;
+  border: 1px solid #b79f78;
+}
+
+.persona-selector label { display: inline-flex; align-items: center; gap: 0.35rem; }
+.persona-selector input { flex: none; accent-color: #f05e1b; }
+#persona-status { min-height: 1.5em; }
+body[data-copernicus="true"] #copernicus-panel[data-persona="copernicus_core"] { border-color: #f05e1b; }
+body[data-copernicus="true"] #copernicus-panel[data-persona="historian_scribe"] { border-color: #9a2d19; }
+body[data-copernicus="true"] #copernicus-panel[data-persona="kinetic_engineer"] { border-color: #7dd3fc; }
+body[data-copernicus="true"] #copernicus-panel[data-persona="ecosystem_governor"] { border-color: #22c55e; }
+body[data-copernicus="true"] #copernicus-panel[data-persona="the_riddle_jester"] { border-color: #f9a851; }

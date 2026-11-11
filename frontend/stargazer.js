@@ -244,17 +244,175 @@ const commsElement = (id) => document.getElementById(id);
 let clockReference = null;
 let clockSample = 0;
 let commsBusy = false;
+let commsEnabled = false;
+let commsReadingImages = false;
+let selectedImages = [];
 
 async function commsJson(path, options = {}) {
   const response = await fetch(path, {
     ...options, signal: AbortSignal.timeout(options.method === "POST" ? 135000 : 10000),
   });
   const data = await response.json();
-  if (!response.ok) throw new Error(typeof data.detail === "string" ? data.detail : `Backend HTTP ${response.status}`);
+  if (!response.ok) {
+    const error = new Error(typeof data.detail === "string" ? data.detail : `Backend HTTP ${response.status}`);
+    error.governor = data.governor;
+    throw error;
+  }
   return data;
 }
 
-function appendComms(sender, text, stamp) {
+function appendCommsGovernor(telemetry) {
+  if (!telemetry) return;
+  const verification = telemetry.routing_verified === true ? "verified"
+    : telemetry.routing_verified === false ? "verification failed" : "not assigned";
+  const matches = telemetry.matching_domains.length
+    ? telemetry.matching_domains.join(", ") : "none";
+  appendComms("GOVERNOR TELEMETRY",
+    `Simulated routing · domain: ${telemetry.domain} (matches: ${matches}) · ` +
+    `${telemetry.status} · node: ${telemetry.assigned_node} · ${verification}\n${telemetry.message}`,
+    telemetry.timestamp);
+}
+
+function renderSkyStars(stars) {
+  const rows = document.getElementById("sky-observations");
+  rows.replaceChildren();
+  for (const star of stars) {
+    const row = document.createElement("tr");
+    for (const value of [
+      star.hip_id,
+      Number(star.magnitude).toFixed(2),
+      Number(star.ra_hours).toFixed(2),
+      Number(star.dec_degrees).toFixed(2),
+      `${Number(star.alt_deg).toFixed(2)}°`,
+      `${Number(star.az_deg).toFixed(2)}°`,
+    ]) {
+      const cell = document.createElement("td");
+      cell.textContent = String(value);
+      row.append(cell);
+    }
+    rows.append(row);
+  }
+}
+
+async function refreshSkyStars(event) {
+  event?.preventDefault();
+  const status = document.getElementById("sky-observation-status");
+  const button = document.getElementById("sky-refresh");
+  const latitude = document.getElementById("sky-latitude").value;
+  const longitude = document.getElementById("sky-longitude").value;
+  button.disabled = true;
+  status.textContent = "Loading cached astronomy data and calculating the sky...";
+  try {
+    const query = new URLSearchParams({ latitude, longitude });
+    const result = await commsJson(`/api/astronomy/visible-stars?${query}`);
+    if (!Array.isArray(result.stars) ||
+        !result.stars.every((star) => Number.isInteger(star.hip_id) &&
+          ["magnitude", "ra_hours", "dec_degrees", "alt_deg", "az_deg"]
+            .every((key) => Number.isFinite(star[key])))) {
+      throw new Error("The astronomy service returned invalid star data.");
+    }
+    renderSkyStars(result.stars);
+    document.getElementById("observation-count").textContent =
+      `${result.stars.length} STARS`;
+    status.textContent = `Observed ${result.observed_at}; azimuth is measured clockwise from north.`;
+  } catch (error) {
+    status.textContent = `Sky calculation failed: ${error.message}`;
+    console.error("Astronomy request failed:", error);
+  } finally {
+    button.disabled = false;
+  }
+}
+
+document.getElementById("sky-form").addEventListener("submit", refreshSkyStars);
+refreshSkyStars();
+
+function renderSelectedImages() {
+  const list = commsElement("comms-selected-images");
+  list.replaceChildren();
+  selectedImages.forEach((image, index) => {
+    const item = document.createElement("li");
+    item.textContent = `${image.name} (${image.bytes.toLocaleString()} bytes) `;
+    const remove = document.createElement("button");
+    remove.type = "button";
+    remove.textContent = "Remove";
+    remove.setAttribute("aria-label", `Remove ${image.name}`);
+    remove.addEventListener("click", () => {
+      selectedImages.splice(index, 1);
+      renderSelectedImages();
+    });
+    item.append(remove);
+    list.append(item);
+  });
+  commsElement("comms-image-count").textContent = selectedImages.length
+    ? `${selectedImages.length} image(s) selected.`
+    : "";
+}
+
+async function fileToBase64(file) {
+  const bytes = new Uint8Array(await file.arrayBuffer());
+  let binary = "";
+  for (let offset = 0; offset < bytes.length; offset += 0x8000) {
+    binary += String.fromCharCode(...bytes.subarray(offset, offset + 0x8000));
+  }
+  return btoa(binary);
+}
+
+commsElement("comms-images").addEventListener("change", async (event) => {
+  const files = Array.from(event.target.files || []);
+  if (!files.length) return;
+  commsReadingImages = true;
+  commsElement("comms-send").disabled = true;
+  commsElement("comms-error").hidden = true;
+  try {
+    if (selectedImages.length + files.length > 4) {
+      throw new Error("Attach no more than 4 images.");
+    }
+    let total = selectedImages.reduce((sum, image) => sum + image.bytes, 0);
+    const additions = [];
+    for (const file of files) {
+      if (!["image/jpeg", "image/png", "image/webp"].includes(file.type)) {
+        throw new Error(`${file.name}: choose a JPEG, PNG, or WebP image.`);
+      }
+      if (file.size < 1 || file.size > 2_000_000) {
+        throw new Error(`${file.name}: each image must be no larger than 2 MB.`);
+      }
+      total += file.size;
+      if (total > 6_000_000) throw new Error("Images exceed the 6 MB total limit.");
+      additions.push({
+        name: file.name,
+        media_type: file.type,
+        data: await fileToBase64(file),
+        bytes: file.size,
+      });
+    }
+    selectedImages.push(...additions);
+    renderSelectedImages();
+  } catch (error) {
+    commsElement("comms-error").textContent = error.message;
+    commsElement("comms-error").hidden = false;
+  } finally {
+    event.target.value = "";
+    commsReadingImages = false;
+    commsElement("comms-send").disabled = commsBusy;
+  }
+});
+
+window.AetherSpeech.attachRecognition(
+  commsElement("comms-voice"),
+  commsElement("comms-input"),
+  commsElement("comms-voice-status"),
+);
+
+function decodeImage(image) {
+  const binary = atob(image.data);
+  const bytes = new Uint8Array(binary.length);
+  for (let index = 0; index < binary.length; index += 1) {
+    bytes[index] = binary.charCodeAt(index);
+  }
+  return URL.createObjectURL(new Blob([bytes], { type: image.media_type }));
+}
+
+function appendComms(sender, text, stamp, images = []) {
   const entry = document.createElement("div");
   const heading = document.createElement("div");
   heading.className = "metric-label";
@@ -262,9 +420,33 @@ function appendComms(sender, text, stamp) {
   const message = document.createElement("div");
   message.textContent = text;
   entry.append(heading, message);
+  for (const image of images) {
+    const preview = document.createElement("img");
+    preview.className = "comms-image";
+    preview.alt = `Attached image: ${image.name}`;
+    preview.src = decodeImage(image);
+    entry.append(preview);
+  }
+  if (sender === "COPERNICUS") {
+    const speak = document.createElement("button");
+    speak.type = "button";
+    speak.textContent = "Read response aloud";
+    speak.addEventListener("click", () => {
+      if (!window.AetherSpeech.speak(text)) {
+        commsElement("comms-error").textContent =
+          "Speech output is unavailable in this browser.";
+        commsElement("comms-error").hidden = false;
+      }
+    });
+    entry.append(speak);
+  }
   const log = commsElement("comms-log");
   log.append(entry);
-  while (log.children.length > 100) log.firstElementChild.remove();
+  while (log.children.length > 100) {
+    const oldest = log.firstElementChild;
+    oldest.querySelectorAll("img").forEach((image) => URL.revokeObjectURL(image.src));
+    oldest.remove();
+  }
   log.scrollTop = log.scrollHeight;
 }
 
@@ -277,10 +459,12 @@ async function refreshComms() {
     clockSample = performance.now();
     const config = await commsJson("/api/chat/status");
     if (!config.enabled) throw new Error("Local AI is disabled. Start historian_matrix.py with an approved --ollama-model.");
+    commsEnabled = true;
     commsElement("comms-status").textContent = `Configured local model: ${config.model}. Availability is checked when you send.`;
-    commsElement("comms-send").disabled = commsBusy;
+    commsElement("comms-send").disabled = commsBusy || commsReadingImages;
     if (!commsBusy) commsElement("comms-error").hidden = true;
   } catch (error) {
+    commsEnabled = false;
     clockReference = null;
     commsElement("comms-utc").textContent = "Backend UTC unavailable";
     commsElement("comms-status").textContent = "Comms unavailable; use the independent Copernicus Matrix shell.";
@@ -300,7 +484,7 @@ setInterval(() => {
 
 commsElement("comms-form").addEventListener("submit", async (event) => {
   event.preventDefault();
-  if (commsBusy) return;
+  if (commsBusy || commsReadingImages) return;
   const input = commsElement("comms-input");
   const message = input.value.trim();
   if (!message) {
@@ -311,23 +495,33 @@ commsElement("comms-form").addEventListener("submit", async (event) => {
   commsBusy = true;
   input.disabled = true;
   commsElement("comms-send").disabled = true;
+  commsElement("comms-images").disabled = true;
   commsElement("comms-error").hidden = true;
   commsElement("comms-status").textContent = "Awaiting Copernicus...";
   try {
     const data = await commsJson("/api/chat", {
       method: "POST", headers: {"Content-Type": "application/json"},
-      body: JSON.stringify({message}),
+      body: JSON.stringify({
+        message,
+        images: selectedImages.map(({ name, media_type, data }) => ({
+          name, media_type, data,
+        })),
+      }),
     });
     if (typeof data.response !== "string" || !data.response.trim() ||
         !Number.isFinite(Date.parse(data.request_utc)) ||
         !Number.isFinite(Date.parse(data.response_utc))) {
       throw new Error("Invalid backend communication response.");
     }
-    appendComms("SHELL", message, data.request_utc);
+    appendComms("SHELL", message, data.request_utc, selectedImages);
+    appendCommsGovernor(data.governor);
     appendComms("COPERNICUS", data.response, data.response_utc);
     input.value = "";
+    selectedImages = [];
+    renderSelectedImages();
     commsElement("comms-status").textContent = "Reply received. Chat is not saved; UTC stamps are assigned by the backend.";
   } catch (error) {
+    appendCommsGovernor(error.governor);
     commsElement("comms-status").textContent = "Message failed; retained for retry.";
     commsElement("comms-error").textContent = error.message;
     commsElement("comms-error").hidden = false;
@@ -335,7 +529,8 @@ commsElement("comms-form").addEventListener("submit", async (event) => {
   } finally {
     commsBusy = false;
     input.disabled = false;
-    commsElement("comms-send").disabled = false;
+    commsElement("comms-images").disabled = false;
+    commsElement("comms-send").disabled = !commsEnabled;
   }
 });
 refreshComms();

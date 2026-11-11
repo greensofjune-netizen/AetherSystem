@@ -208,7 +208,7 @@ class LocalAirGappedEngine:
 
     def __init__(
         self,
-        model_filename: str = "qwen2.5-coder-7b-q4.gguf",
+        model_filename: str = "qwen2.5-coder-1.5b-instruct-q4_k_m.gguf",
         *,
         model_path: str | Path | None = None,
     ) -> None:
@@ -246,10 +246,23 @@ class LocalAirGappedEngine:
         )
         return self._model
 
+    def preload(self) -> None:
+        """Load the configured GGUF model when its backend and weights exist."""
+        if not self.model_path.is_file():
+            raise FileNotFoundError(
+                f"Local model weights are missing at {self.model_path}."
+            )
+        if self._load_model() is None:
+            raise RuntimeError(
+                "Local inference backend is unavailable; install the local-ai extra."
+            )
+
     def execute_local_inference(
         self,
         prompt: str,
         reasoning_effort: str = "medium",
+        *,
+        max_output_tokens: int | None = None,
     ) -> dict[str, Any]:
         """Generate a text response locally without contacting a remote service."""
         if not isinstance(prompt, str) or not prompt.strip():
@@ -262,6 +275,10 @@ class LocalAirGappedEngine:
             raise ValueError(
                 f"Reasoning effort must be one of: {allowed_efforts}."
             )
+        if max_output_tokens is not None and (
+            type(max_output_tokens) is not int or not 1 <= max_output_tokens <= 8192
+        ):
+            raise ValueError("Maximum output tokens must be between 1 and 8192.")
 
         if not self.model_path.is_file():
             logging.warning(
@@ -287,6 +304,9 @@ class LocalAirGappedEngine:
                 ),
             }
 
+        token_budget = _LOCAL_TOKEN_BUDGETS[reasoning_effort]
+        if max_output_tokens is not None:
+            token_budget = min(token_budget, max_output_tokens)
         response = model.create_chat_completion(
             messages=[
                 {
@@ -297,7 +317,7 @@ class LocalAirGappedEngine:
                 },
                 {"role": "user", "content": prompt.strip()},
             ],
-            max_tokens=_LOCAL_TOKEN_BUDGETS[reasoning_effort],
+            max_tokens=token_budget,
             temperature=0.2,
         )
         choices = response.get("choices")

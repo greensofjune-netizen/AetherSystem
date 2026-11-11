@@ -66,7 +66,7 @@ shellTabs.forEach((tab, index) => {
   });
 });
 stargazerFrame.addEventListener("load", notifyStargazerVisibility);
-if (copernicusEnabled) selectShellTab(0);
+selectShellTab(0);
 
 async function fetchJson(url) {
   const controller = new AbortController();

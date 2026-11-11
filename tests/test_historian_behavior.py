@@ -237,7 +237,9 @@ def test_main_can_run_historian_telemetry(
     )
 
     assert result == 0
-    assert "Local review result." in capsys.readouterr().out
+    output = capsys.readouterr().out
+    assert "Aristotle | Local Core Intelligence Feedback" in output
+    assert "Local review result." in output
 
 
 def test_scanner_lists_gguf_weights_from_local_and_external_directories(

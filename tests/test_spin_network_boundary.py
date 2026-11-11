@@ -1,7 +1,20 @@
 import numpy as np
 import pytest
 
-from aether_engine.spin_network_boundary import calculate_spin_network_boundary, main
+from aether_engine.spin_network_boundary import (
+    calculate_spin_network_boundary,
+    compute_spin_network_boundary,
+    main,
+)
+
+
+def test_boundary_compute_helper_returns_results_without_console_output(capsys):
+    spins, area, entropy = compute_spin_network_boundary(num_links=4, seed=7)
+
+    assert len(spins) == 4
+    assert area > 0
+    assert entropy == area / 4
+    assert capsys.readouterr().out == ""
 
 
 def test_boundary_calculation_is_seeded_and_returns_expected_values(capsys):

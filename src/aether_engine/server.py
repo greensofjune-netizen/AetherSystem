@@ -1,24 +1,59 @@
 from __future__ import annotations
 
+import asyncio
+import hmac
 import ipaddress
+import json
+import logging
+import math
 import os
+import sqlite3
+import sys
+import time
+from collections import deque
+from collections.abc import AsyncIterator
 from dataclasses import asdict
 from datetime import datetime, timezone
 from pathlib import Path
-from threading import Lock
+from threading import Lock, Thread
 from typing import Annotated, Any, Literal, NoReturn
 
 import uvicorn
-from fastapi import FastAPI, HTTPException, Query, Request
+from fastapi import FastAPI, Header, HTTPException, Query, Request
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import JSONResponse
-from pydantic import BaseModel, ConfigDict, Field
+from fastapi.responses import FileResponse, JSONResponse, StreamingResponse
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 
+from . import live_sync_supervisor
 from .ai_bridge import LocalAirGappedEngine
+from .astrology import NatalChartRequest, calculate_natal_chart
+from .astronomy_engine import get_astronomy_engine
 from .backups import DEFAULT_BACKUP_RETENTION, write_backup
-from .database import AetherStore
+from .database import AetherStore, Event
+from .engine_core import EngineOrchestrator
 from .engine_doctor import AetherEngineDoctor
+from .engine_runtime import EngineConfig, EngineNotReadyError, EngineRuntime
 from .historian import CoPilotHistorian
+from .inference_scheduler import (
+    InferenceCapacityError,
+    InferenceQueueTimeoutError,
+    InferenceSchedulerClosedError,
+)
+from .local_ai_runtime import (
+    DEFAULT_LOCAL_MODEL,
+    LocalModelUnavailableError,
+)
+from .model_providers import (
+    ChatRequest,
+    LocalEngineProvider,
+    LocalInferenceProviderError,
+    OllamaProvider,
+    OllamaProviderError,
+    ProviderMessage,
+)
+from .multimodal import ImageAttachment, validate_image_batch
+from .propulsion_matrix import KineticPropulsionArchive
+from .request_telemetry import install_request_telemetry
 from .scheduler import (
     SchedulerError,
     backup_schedule_status,
@@ -29,12 +64,22 @@ from .scheduler import (
 ReasoningEffort = Literal["none", "low", "medium", "high", "xhigh", "max"]
 TaskPriority = Literal["low", "normal", "high"]
 TaskStatus = Literal["pending", "done"]
+SourceLanguage = Literal["python", "js", "cpp", "rust", "go", "swift", "shell"]
+NodeName = Literal["COPERNICUS", "HISTORIAN", "MATRIX", "ATLAS"]
+UNIFIED_DISPATCH_TOPIC = "unified-dispatch"
+UNIFIED_PAYLOAD_LIMIT_BYTES = 32_768
+UNIFIED_EVENT_REPLAY_LIMIT = 500
+UNIFIED_DISPATCH_RATE_LIMIT = 120
+UNIFIED_DISPATCH_RATE_WINDOW_SECONDS = 60.0
 
 app = FastAPI(
     title="Aether Engine API",
-    description="Loopback-only REST API for Aether Engine project operations.",
+    description=(
+        "Local REST API; non-loopback clients require the AETHER_API_TOKEN secret."
+    ),
     version="1.0.0",
 )
+app.state.local_model_status = {"model": DEFAULT_LOCAL_MODEL, "status": "pending"}
 
 allowed_origins = [
     origin.strip()
@@ -46,11 +91,33 @@ app.add_middleware(
     allow_origins=allowed_origins,
     allow_credentials=False,
     allow_methods=["GET", "POST", "PATCH", "DELETE"],
-    allow_headers=["Content-Type"],
+    allow_headers=["Content-Type", "Last-Event-ID", "X-Aether-Token"],
 )
 
 engine = LocalAirGappedEngine()
-inference_lock = Lock()
+engine_config = EngineConfig.from_environment()
+engine_runtime = EngineRuntime(
+    EngineOrchestrator(),
+    providers={
+        "local": LocalEngineProvider(lambda: engine),
+        "ollama": OllamaProvider(
+            timeout=engine_config.model_request_timeout_seconds,
+            preload_timeout=engine_config.model_preload_timeout_seconds,
+        ),
+    },
+    config=engine_config,
+)
+engine_runtime.start()
+app.state.engine_runtime = engine_runtime
+app.router.add_event_handler("shutdown", engine_runtime.stop)
+dispatch_rate_lock = Lock()
+unified_dispatch_lock = asyncio.Lock()
+dispatch_attempts: dict[str, deque[float]] = {}
+
+SOURCE_CLIENT_PATH = Path(__file__).resolve().parents[2] / "frontend" / "aether_client.js"
+INSTALLED_CLIENT_PATH = (
+    Path(sys.prefix) / "share" / "aether-engine" / "frontend" / "aether_client.js"
+)
 
 
 class StrictRequest(BaseModel):
@@ -60,6 +127,12 @@ class StrictRequest(BaseModel):
 class ChatCompletionRequest(StrictRequest):
     prompt: str = Field(min_length=1, max_length=32_768)
     reasoning_effort: ReasoningEffort = "medium"
+    images: list[ImageAttachment] = Field(default_factory=list, max_length=4)
+
+    @model_validator(mode="after")
+    def validate_images(self) -> ChatCompletionRequest:
+        validate_image_batch(self.images)
+        return self
 
 
 class ChatCompletionResponse(BaseModel):
@@ -98,6 +171,30 @@ class BackupRequest(StrictRequest):
     keep: int = Field(default=DEFAULT_BACKUP_RETENTION, ge=1, le=10_000)
 
 
+class UnifiedEnvelope(StrictRequest):
+    protocol_version: Literal["1.0.0"]
+    source_lang: SourceLanguage
+    node: NodeName
+    event: str = Field(min_length=1, max_length=64, pattern=r"^[A-Z][A-Z0-9_]*$")
+    timestamp: float = Field(strict=True, ge=0, allow_inf_nan=False)
+    payload: dict[str, Any] = Field(max_length=64)
+
+    @model_validator(mode="after")
+    def enforce_payload_size(self) -> UnifiedEnvelope:
+        if len(self.model_dump_json().encode("utf-8")) > UNIFIED_PAYLOAD_LIMIT_BYTES:
+            raise ValueError(
+                f"Envelope must be no larger than {UNIFIED_PAYLOAD_LIMIT_BYTES} bytes."
+            )
+        return self
+
+
+class UnifiedDispatchResponse(BaseModel):
+    status: Literal["ACCEPTED"]
+    persisted: bool
+    event_id: int
+    live_subscribers_notified: int
+
+
 def get_database_path() -> Path:
     configured_path = os.environ.get("AETHER_DATABASE_PATH")
     if configured_path is not None:
@@ -125,25 +222,132 @@ def _raise_bad_request(error: ValueError) -> NoReturn:
     raise HTTPException(status_code=422, detail=str(error)) from error
 
 
+def _check_unified_dispatch_rate(client_host: str) -> None:
+    now = time.monotonic()
+    with dispatch_rate_lock:
+        for host, history in tuple(dispatch_attempts.items()):
+            while (
+                history
+                and now - history[0] >= UNIFIED_DISPATCH_RATE_WINDOW_SECONDS
+            ):
+                history.popleft()
+            if not history:
+                del dispatch_attempts[host]
+        attempts = dispatch_attempts.setdefault(client_host, deque())
+        if len(attempts) >= UNIFIED_DISPATCH_RATE_LIMIT:
+            retry_after = max(
+                1,
+                math.ceil(
+                    UNIFIED_DISPATCH_RATE_WINDOW_SECONDS - (now - attempts[0])
+                ),
+            )
+            raise HTTPException(
+                status_code=429,
+                detail="Unified dispatch rate limit exceeded.",
+                headers={"Retry-After": str(retry_after)},
+            )
+        attempts.append(now)
+
+
+def _list_unified_dispatch_events(
+    limit: int = UNIFIED_EVENT_REPLAY_LIMIT,
+) -> list[Event]:
+    return CoPilotHistorian(get_store()).history(
+        limit=limit, topic=UNIFIED_DISPATCH_TOPIC
+    )
+
+
+def _record_unified_dispatch_event(envelope: dict[str, Any]) -> Event:
+    return CoPilotHistorian(get_store()).record(
+        UNIFIED_DISPATCH_TOPIC,
+        json.dumps(envelope, ensure_ascii=False, separators=(",", ":")),
+    )
+
+
+def _dispatch_event_record(event: Event) -> dict[str, Any]:
+    return {
+        "event_id": event.id,
+        "created_at": event.created_at,
+        "envelope": json.loads(event.message),
+    }
+
+
+def _format_sse(event_name: str, record: dict[str, Any], event_id: int | None) -> str:
+    identifier = f"id: {event_id}\n" if event_id is not None else ""
+    data = json.dumps(record, ensure_ascii=False, separators=(",", ":"))
+    return f"{identifier}event: {event_name}\ndata: {data}\n\n"
+
+
+def _start_local_model_preload() -> None:
+    app.state.local_model_status = {
+        "model": DEFAULT_LOCAL_MODEL,
+        "status": "loading",
+    }
+
+    def preload() -> None:
+        try:
+            engine_runtime.preload("ollama", DEFAULT_LOCAL_MODEL)
+        except LocalModelUnavailableError as error:
+            logging.getLogger(__name__).warning(
+                "Default local model could not be preloaded: %s", error
+            )
+            app.state.local_model_status = {
+                "model": DEFAULT_LOCAL_MODEL,
+                "status": "unavailable",
+                "detail": str(error),
+            }
+        else:
+            app.state.local_model_status = {
+                "model": DEFAULT_LOCAL_MODEL,
+                "status": "ready",
+            }
+
+    Thread(target=preload, name="aether-model-preload", daemon=True).start()
+
+
+app.router.add_event_handler("startup", _start_local_model_preload)
+
+
 @app.middleware("http")
-async def require_loopback_client(request: Request, call_next: Any) -> Any:
-    """Keep local database and host operations inaccessible to remote clients."""
-    client = request.client
-    if client is None:
-        return JSONResponse(
-            status_code=403, content={"detail": "Loopback clients only."}
-        )
+async def authorize_remote_clients(request: Request, call_next: Any) -> Any:
+    """Require a shared secret for every non-loopback HTTP request."""
+    if request.method == "OPTIONS":
+        return await call_next(request)
     try:
-        address = ipaddress.ip_address(client.host)
-    except ValueError:
+        authorize_aether_client(request)
+    except HTTPException as error:
         return JSONResponse(
-            status_code=403, content={"detail": "Loopback clients only."}
-        )
-    if not address.is_loopback:
-        return JSONResponse(
-            status_code=403, content={"detail": "Loopback clients only."}
+            status_code=error.status_code,
+            content={"detail": error.detail},
+            headers=error.headers,
         )
     return await call_next(request)
+
+
+install_request_telemetry(app, "aether-api")
+
+
+def authorize_aether_client(request: Request) -> None:
+    """Allow loopback clients and authenticate all other peers by shared token."""
+    client = request.client
+    try:
+        address = ipaddress.ip_address(client.host) if client is not None else None
+    except ValueError:
+        address = None
+    if address is not None and address.is_loopback:
+        return
+
+    expected_token = os.environ.get("AETHER_API_TOKEN", "")
+    provided_token = request.headers.get("X-Aether-Token", "")
+    if not expected_token or not hmac.compare_digest(
+        provided_token.encode("utf-8"), expected_token.encode("utf-8")
+    ):
+        raise HTTPException(
+            status_code=401,
+            detail=(
+                "Unauthorized: Valid X-Aether-Token header required for remote access."
+            ),
+        )
 
 
 @app.get("/health")
@@ -156,43 +360,142 @@ def health_check() -> dict[str, str | bool]:
     }
 
 
+@app.get("/api/v1/local-model/status")
+def local_model_status() -> dict[str, str]:
+    return dict(app.state.local_model_status)
+
+
+@app.get("/api/v1/engine/status")
+def engine_status(request: Request) -> dict[str, Any]:
+    return request.app.state.engine_runtime.status()
+
+
+@app.get("/api/v1/propulsion/references")
+def propulsion_references(q: str = Query(default="", max_length=200)) -> dict[str, Any]:
+    """Search local general references with their sources and historical links."""
+    try:
+        archive = KineticPropulsionArchive()
+        return {
+            "references": archive.search_references(q),
+            "lineage": archive.fetch_reference_lineage(),
+        }
+    except (OSError, sqlite3.Error) as error:
+        logging.getLogger(__name__).exception("Propulsion archive lookup failed")
+        raise HTTPException(503, "The local propulsion archive is unavailable.") from error
+
+
+@app.get("/aether_client.js")
+def serve_shared_javascript() -> FileResponse:
+    """Serve the shared browser client."""
+    for path in (SOURCE_CLIENT_PATH, INSTALLED_CLIENT_PATH):
+        if path.is_file():
+            return FileResponse(path, media_type="application/javascript")
+    raise HTTPException(status_code=404, detail="Shared JS file not found.")
+
+
 @app.post("/v1/chat/completions", response_model=ChatCompletionResponse)
 def create_chat_completion(
-    request: ChatCompletionRequest,
+    entry: ChatCompletionRequest,
+    request: Request,
 ) -> ChatCompletionResponse:
     """Generate a completion using the configured local model."""
-    prompt = request.prompt.strip()
+    prompt = entry.prompt.strip()
     if not prompt:
         raise HTTPException(status_code=422, detail="Prompt cannot be blank.")
 
-    with inference_lock:
-        result = engine.execute_local_inference(
-            prompt=prompt,
-            reasoning_effort=request.reasoning_effort,
-        )
-
-    if result.get("status") != "SUCCESS":
+    runtime = request.app.state.engine_runtime
+    try:
+        if entry.images:
+            result = runtime.chat(
+                "ollama",
+                ChatRequest(
+                    model=DEFAULT_LOCAL_MODEL,
+                    messages=(
+                        ProviderMessage(
+                            "system",
+                            "Answer the user clearly and accurately. Analyze the "
+                            "provided image attachments when relevant, and state "
+                            "uncertainty when image details are ambiguous.",
+                        ),
+                        ProviderMessage(
+                            "user",
+                            prompt,
+                            tuple(image.data for image in entry.images),
+                        ),
+                    ),
+                    max_output_tokens=engine_config.max_output_tokens,
+                ),
+            )
+        else:
+            result = runtime.chat(
+                "local",
+                ChatRequest(
+                    model=engine.model_path.name,
+                    messages=(ProviderMessage("user", prompt),),
+                    max_output_tokens=engine_config.max_output_tokens,
+                    reasoning_effort=entry.reasoning_effort,
+                ),
+            )
+    except (InferenceCapacityError, InferenceQueueTimeoutError) as error:
+        raise HTTPException(
+            status_code=429,
+            detail=str(error),
+            headers={"Retry-After": "1"},
+        ) from error
+    except (EngineNotReadyError, InferenceSchedulerClosedError) as error:
+        raise HTTPException(status_code=503, detail=str(error)) from error
+    except LocalInferenceProviderError as error:
+        detail: str | dict[str, str]
+        if error.http_status == 503:
+            detail = {"status": error.status, "message": str(error)}
+        else:
+            detail = str(error)
+        raise HTTPException(status_code=error.http_status, detail=detail) from error
+    except OllamaProviderError as error:
         raise HTTPException(
             status_code=503,
-            detail={
-                "status": result.get("status", "INFERENCE_UNAVAILABLE"),
-                "message": result.get("output", "Local inference is unavailable."),
-            },
-        )
+            detail="Local Ollama could not provide an image-aware response.",
+        ) from error
 
-    output = result.get("output")
-    if not isinstance(output, str):
-        raise HTTPException(
-            status_code=502,
-            detail="Local model returned an invalid completion response.",
+    return ChatCompletionResponse(
+        model=result.model,
+        response=result.content,
+        status="success",
+    )
+
+
+@app.get("/api/v1/astronomy/visible-stars")
+def visible_stars(
+    latitude: float = Query(default=34.0975, ge=-90, le=90),
+    longitude: float = Query(default=-117.6484, ge=-180, le=180),
+    max_magnitude: float = Query(default=4.0, ge=-2, le=8),
+    at: datetime | None = None,
+) -> dict[str, Any]:
+    engine = get_astronomy_engine(latitude, longitude)
+    observation_time = at or datetime.now(timezone.utc)
+    if observation_time.tzinfo is None:
+        observation_time = observation_time.replace(tzinfo=timezone.utc)
+    else:
+        observation_time = observation_time.astimezone(timezone.utc)
+    try:
+        stars = engine.compute_local_sky(observation_time, max_magnitude)
+    except (OSError, RuntimeError, ValueError) as error:
+        logging.getLogger(__name__).warning(
+            "Astronomy calculation failed: %s", error
         )
-    model = result.get("model", engine.model_path.name)
-    if not isinstance(model, str):
         raise HTTPException(
-            status_code=502,
-            detail="Local model returned an invalid model identifier.",
-        )
-    return ChatCompletionResponse(model=model, response=output, status="success")
+            status_code=503,
+            detail=(
+                "Astronomy data could not be loaded or the requested date is "
+                "unsupported."
+            ),
+        ) from error
+    return {
+        "observed_at": observation_time.isoformat(),
+        "latitude": latitude,
+        "longitude": longitude,
+        "stars": stars,
+    }
 
 
 @app.get("/api/v1/tasks")
@@ -278,6 +581,156 @@ def create_event(request: EventCreate) -> dict[str, Any]:
     except ValueError as error:
         _raise_bad_request(error)
     return asdict(event)
+
+
+@app.post("/api/v1/astrology/chart")
+def calculate_chart(request: NatalChartRequest) -> dict[str, object]:
+    try:
+        return calculate_natal_chart(request)
+    except ValueError as error:
+        _raise_bad_request(error)
+
+
+@app.post("/api/v1/unified/dispatch")
+async def unified_cross_language_dispatch(
+    envelope: UnifiedEnvelope, request: Request
+) -> UnifiedDispatchResponse:
+    """Persist a cross-language event, update state, and notify live subscribers."""
+    client_host = request.client.host if request.client is not None else ""
+    _check_unified_dispatch_rate(client_host)
+    envelope_data = envelope.model_dump(mode="json")
+    async with unified_dispatch_lock:
+        stored_event = await asyncio.to_thread(
+            _record_unified_dispatch_event, envelope_data
+        )
+        dispatch_record = _dispatch_event_record(stored_event)
+        await live_sync_supervisor.safe_update_dashboard_state(
+            envelope.event,
+            {
+                "unified_dispatch": dispatch_record,
+                "last_source_lang": envelope.source_lang,
+                "last_node": envelope.node,
+            },
+        )
+        notified = await live_sync_supervisor.supervisor.broadcast(
+            event_type=envelope.event,
+            data=dispatch_record,
+        )
+    return UnifiedDispatchResponse(
+        status="ACCEPTED",
+        persisted=True,
+        event_id=stored_event.id,
+        live_subscribers_notified=notified,
+    )
+
+
+@app.get("/api/v1/unified/state")
+async def unified_dispatch_state() -> dict[str, Any]:
+    """Return in-memory dashboard state with the durable latest dispatch."""
+    state = await live_sync_supervisor.safe_get_dashboard_snapshot()
+    events = await asyncio.to_thread(_list_unified_dispatch_events, 1)
+    latest = _dispatch_event_record(events[0]) if events else None
+    if latest is not None:
+        state["unified_dispatch"] = latest
+    return {"state": state, "last_dispatch": latest}
+
+
+@app.get("/api/v1/unified/stream")
+async def unified_dispatch_stream(
+    request: Request,
+    last_event_id: Annotated[str | None, Header(alias="Last-Event-ID")] = None,
+) -> StreamingResponse:
+    """Stream dispatches with durable replay after reconnects and restarts."""
+    cursor: int | None = None
+    if last_event_id is not None:
+        try:
+            cursor = int(last_event_id)
+        except ValueError as error:
+            raise HTTPException(
+                status_code=400, detail="Last-Event-ID must be an integer."
+            ) from error
+        if cursor < 0:
+            raise HTTPException(
+                status_code=400, detail="Last-Event-ID must be non-negative."
+            )
+
+    try:
+        queue = live_sync_supervisor.supervisor.register_interface()
+    except RuntimeError as error:
+        raise HTTPException(status_code=503, detail=str(error)) from error
+
+    async def stream_events() -> AsyncIterator[str]:
+        last_sent = cursor
+        try:
+            yield "retry: 3000\n\n"
+            events = await asyncio.to_thread(_list_unified_dispatch_events)
+            events.reverse()
+            latest = _dispatch_event_record(events[-1]) if events else None
+
+            if cursor is None:
+                snapshot_id = latest["event_id"] if latest else None
+                yield _format_sse(
+                    "snapshot",
+                    latest or {"event_id": None, "created_at": None, "envelope": None},
+                    snapshot_id,
+                )
+                last_sent = snapshot_id
+            elif (
+                (latest is not None and cursor > latest["event_id"])
+                or (
+                    len(events) == UNIFIED_EVENT_REPLAY_LIMIT
+                    and cursor < events[0].id
+                )
+            ):
+                reset_id = latest["event_id"] if latest else 0
+                yield _format_sse(
+                    "reset",
+                    latest or {"event_id": None, "created_at": None, "envelope": None},
+                    reset_id,
+                )
+                last_sent = reset_id
+            else:
+                for event in events:
+                    if event.id <= cursor:
+                        continue
+                    record = _dispatch_event_record(event)
+                    yield _format_sse("dispatch", record, event.id)
+                    last_sent = event.id
+
+            while not await request.is_disconnected():
+                try:
+                    message = await asyncio.wait_for(queue.get(), timeout=15)
+                except asyncio.TimeoutError:
+                    yield ": keep-alive\n\n"
+                    continue
+                if message is None:
+                    queue.task_done()
+                    yield (
+                        "event: replay-required\n"
+                        'data: {"reason":"subscriber_queue_overflow"}\n\n'
+                    )
+                    return
+                try:
+                    notification = json.loads(message)
+                    record = notification["data"]
+                    event_id = record["event_id"]
+                    if event_id <= (last_sent or 0):
+                        continue
+                    yield _format_sse("dispatch", record, event_id)
+                    last_sent = event_id
+                finally:
+                    queue.task_done()
+        finally:
+            live_sync_supervisor.supervisor.unregister_interface(queue)
+
+    return StreamingResponse(
+        stream_events(),
+        media_type="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache, no-transform",
+            "X-Accel-Buffering": "no",
+        },
+    )
 
 
 @app.get("/api/v1/status")

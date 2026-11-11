@@ -1,0 +1,15 @@
+.sky-observations h2 { margin: 0; font-size: 1.15rem; font-weight: normal; }
+.sky-observations form { display: flex; flex-wrap: wrap; align-items: end; gap: 8px; }
+.sky-observations form div { display: grid; gap: 4px; font-size: .85rem; }
+.sky-observations input { width: 130px; min-height: 38px; padding: 6px; }
+.sky-observations button { min-height: 38px; }
+.sky-table-wrap { overflow-x: auto; }
+.sky-observations table { width: 100%; border-collapse: collapse; font-size: .84rem; }
+.sky-observations caption { padding: 8px; text-align: left; color: var(--sand-dim); }
+.sky-observations th, .sky-observations td { padding: 7px; border-bottom: 1px solid var(--gold-dim); text-align: right; }
+.sky-observations th:first-child, .sky-observations td:first-child { text-align: left; }
+.sky-observations th { color: var(--gold); }
+.comms-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+.comms-actions input[type="file"] { max-width: 100%; }
+.comms-image { display: block; max-width: min(100%, 320px); max-height: 240px; margin-top: 8px; }
+.comms-actions button:focus-visible { outline: 2px solid var(--gold); outline-offset: 3px; }

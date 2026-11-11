@@ -5,6 +5,8 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Cosmic Stargazer &amp; Orbital Telemetry</title>
   <link rel="stylesheet" href="/stargazer.css">
+  <link rel="stylesheet" href="/astronomy.css">
+  <script src="/speech.js" defer></script>
   <script src="/stargazer.js" defer></script>
 </head>
 <body>
@@ -25,6 +27,36 @@
       </div>
       <p class="notice">No lunar, cloud-cover, or orbital feed is configured.</p>
     </section>
+    <section class="card sky-observations" aria-labelledby="observations-title">
+      <div class="title-row">
+        <h2 id="observations-title">Visible Hipparcos stars</h2>
+        <span class="badge" id="observation-count">LOADING</span>
+      </div>
+      <p class="notice">Positions use JPL DE421 and the Hipparcos catalog. The first
+        observation downloads and caches those data files; later calculations are local.
+        Coordinates are entered manually and sent only to this local server.</p>
+      <form id="sky-form">
+        <div><label for="sky-latitude">Latitude</label>
+          <input id="sky-latitude" name="latitude" type="number" min="-90" max="90"
+            step="any" value="34.0975" required></div>
+        <div><label for="sky-longitude">Longitude</label>
+          <input id="sky-longitude" name="longitude" type="number" min="-180" max="180"
+            step="any" value="-117.6484" required></div>
+        <button type="submit" id="sky-refresh">Calculate visible stars</button>
+      </form>
+      <p id="sky-observation-status" role="status" aria-live="polite">
+        Calculating the current sky...
+      </p>
+      <div class="sky-table-wrap">
+        <table>
+          <caption>Bright stars above the local horizon, ordered by magnitude</caption>
+          <thead><tr><th scope="col">HIP</th><th scope="col">Mag</th>
+            <th scope="col">RA</th><th scope="col">Dec</th>
+            <th scope="col">Alt</th><th scope="col">Az</th></tr></thead>
+          <tbody id="sky-observations"></tbody>
+        </table>
+      </div>
+    </section>
     <section class="card guide">
       <label class="metric-label" for="star-guide">CONSTELLATION GUIDE</label>
       <select id="star-guide">
@@ -39,12 +71,24 @@
       </div>
       <p class="notice" id="comms-status" role="status">Checking the local Copernicus backend...</p>
       <p class="notice">Messages are independent; Copernicus has no persistent memory or Matrix data connection. UTC is a backend communication reference, not external clock synchronization.</p>
+      <p class="notice">Browser voice recognition may use your browser vendor's speech service.
+        Image attachments are sent only to the configured local model.</p>
       <div id="comms-log" role="log" aria-live="polite"></div>
       <p id="comms-error" role="alert" hidden></p>
       <form id="comms-form">
         <label class="sr-only" for="comms-input">Message Copernicus</label>
         <input id="comms-input" type="text" maxlength="4000" required placeholder="Message Copernicus...">
-        <button type="submit" id="comms-send" disabled>Send</button>
+        <div class="comms-actions">
+          <label for="comms-images">Attach images</label>
+          <input id="comms-images" type="file" accept="image/jpeg,image/png,image/webp"
+            multiple aria-describedby="comms-image-hint">
+          <span id="comms-image-hint">Up to 4 images, 2 MB each.</span>
+          <span id="comms-image-count" role="status" aria-live="polite"></span>
+          <ul id="comms-selected-images" aria-label="Selected image attachments"></ul>
+          <button type="button" id="comms-voice">Start voice input</button>
+          <span id="comms-voice-status" role="status" aria-live="polite"></span>
+          <button type="submit" id="comms-send" disabled>Send</button>
+        </div>
       </form>
     </section>
   </main>

@@ -1,0 +1,10 @@
+.perception-panel{padding:24px 0;overflow:auto;line-height:1.55}
+.perception-panel h2{font-family:Georgia,serif;font-weight:400}
+.perception-panel p{max-width:75ch;color:var(--text)}
+.perception-actions{display:flex;flex-wrap:wrap;gap:10px}
+.perception-panel button{background:#282018;color:#f2e9da;border:1px solid #6d4c30;border-radius:7px;padding:10px}
+.perception-panel video{display:block;width:min(100%,480px);background:#000;border-radius:8px}
+.perception-panel video:not([src]){min-height:120px}
+.perception-panel textarea{display:block;width:min(100%,600px);min-height:80px;margin:6px 0;background:#211a15;color:var(--text);border:1px solid #6d4c30;border-radius:7px}
+.perception-panel li{margin:8px 0;overflow-wrap:anywhere}
+.perception-panel li button{margin-inline-start:10px}

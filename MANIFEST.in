@@ -1,0 +1,32 @@
+include LICENSE
+include THIRD_PARTY_NOTICES.md
+include *.py
+include .gitignore
+include requirements.txt
+include aether_protocol.schema.json
+include openapitools.json
+include wrangler.jsonc
+graft .github
+graft src
+graft automator
+graft examples
+graft frontend
+graft include
+graft sdk
+graft tests
+graft website
+graft worker
+prune .agents
+prune .build
+prune .venv
+prune .aether-backups
+prune backups
+prune build
+prune dist
+prune models
+exclude aether_metrics.json
+exclude historian_telemetry_vault.json
+exclude ingested_knowledge.txt
+global-exclude __pycache__ *.py[cod] *.sqlite3* *.sqlite *.db
+global-exclude *.gguf *.pkg *.dylib *.so *.dll *.log *.jsonl
+global-exclude .env .env.* .DS_Store

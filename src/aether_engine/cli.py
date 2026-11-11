@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import math
 import os
 import sqlite3
 import sys
@@ -10,6 +11,7 @@ from collections.abc import Sequence
 from datetime import date, datetime, timezone
 from pathlib import Path
 
+from .arts_telemetry import latest_matrix_arts_telemetry
 from .backups import DEFAULT_BACKUP_RETENTION, write_backup
 from .database import AetherStore
 from .engine_doctor import AetherEngineDoctor
@@ -233,6 +235,53 @@ def _dashboard_section(title: str) -> None:
     print(_dashboard_line(title, "cyan"))
 
 
+def _print_matrix_arts_status(store: AetherStore) -> None:
+    event = latest_matrix_arts_telemetry(store.database_path)
+    _dashboard_section("MATRIX / ARTS LINK")
+    if event is None:
+        print(_dashboard_line("No arts or LOS telemetry recorded yet."))
+        return
+
+    event_name = event["event"]
+    payload = event["payload"]
+    if event_name == "ARTS_STAGE_CUE_REQUESTED":
+        print(
+            _dashboard_line(
+                f"#{event['event_id']}  Stage cue request: operator approval required"
+            )
+        )
+        return
+
+    mode = payload.get("mode")
+    if not isinstance(mode, str) or mode not in {"MUSIC", "ART", "THEATRE"}:
+        mode = "MATRIX"
+    link_budget = payload.get("link_budget", payload)
+    if not isinstance(link_budget, dict):
+        link_budget = {}
+    status = link_budget.get("los_status")
+    if not isinstance(status, str) or status not in {
+        "CLEAR_LOS_ESTIMATE",
+        "OBSTRUCTED_OR_OUT_OF_RANGE",
+    }:
+        status = "ESTIMATE_UNAVAILABLE"
+    distance = link_budget.get("distance_km")
+    distance_is_finite = False
+    if isinstance(distance, (int, float)) and not isinstance(distance, bool):
+        try:
+            distance_is_finite = math.isfinite(distance)
+        except OverflowError:
+            distance_is_finite = False
+    if distance_is_finite:
+        distance_text = f"{distance:.2f} km"
+    else:
+        distance_text = "distance unavailable"
+    print(
+        _dashboard_line(
+            f"#{event['event_id']}  {mode}  |  {distance_text}  |  {status}"
+        )
+    )
+
+
 def _print_dashboard(store: AetherStore) -> None:
     snapshot = store.dashboard_snapshot()
     total = snapshot.total_count
@@ -251,6 +300,7 @@ def _print_dashboard(store: AetherStore) -> None:
         )
     )
     print(_dashboard_line(progress, "green"))
+    _print_matrix_arts_status(store)
 
     _dashboard_section("NEXT UP")
     if snapshot.pending_tasks:

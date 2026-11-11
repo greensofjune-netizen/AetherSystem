@@ -164,6 +164,36 @@ def test_status_dashboard_handles_empty_project(tmp_path: Path, capsys) -> None:
     assert "No activity recorded." in output
 
 
+def test_status_dashboard_shows_latest_matrix_arts_event(
+    tmp_path: Path, capsys
+) -> None:
+    database = tmp_path / "aether.sqlite3"
+    envelope = {
+        "protocol_version": "1.0.0",
+        "source_lang": "python",
+        "node": "MATRIX",
+        "event": "ARTS_SESSION_PLANNED",
+        "timestamp": 1_800_000_000,
+        "payload": {
+            "mode": "THEATRE",
+            "link_budget": {
+                "distance_km": 0.62,
+                "los_status": "CLEAR_LOS_ESTIMATE",
+            },
+        },
+    }
+    AetherStore(database).add_event(
+        "unified-dispatch", json.dumps(envelope)
+    )
+
+    assert main(["--database", str(database), "status"]) == 0
+    output = capsys.readouterr().out
+    assert "MATRIX / ARTS LINK" in output
+    assert "THEATRE" in output
+    assert "0.62 km" in output
+    assert "CLEAR_LOS_ESTIMATE" in output
+
+
 def test_task_priority_and_due_date_show_on_dashboard(
     tmp_path: Path, capsys
 ) -> None:

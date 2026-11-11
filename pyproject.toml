@@ -1,5 +1,5 @@
 [build-system]
-requires = ["setuptools>=61.0"]
+requires = ["setuptools>=84.2.1"]
 build-backend = "setuptools.build_meta"
 
 [project]
@@ -8,6 +8,8 @@ version = "0.1.0"
 description = "A local-first CLI for project tasks and event history."
 readme = "README.md"
 requires-python = ">=3.11"
+license = "MIT"
+license-files = ["LICENSE"]
 
 [project.scripts]
 aether-engine = "aether_engine.cli:main"
@@ -15,21 +17,55 @@ aether-server = "aether_engine.server:main"
 aether-historian-behavior = "aether_engine.historian_behavior:main"
 aether-spin-network = "aether_engine.spin_network_boundary:main"
 aether-spin-network-visualize = "aether_engine.spin_network_visualization:main"
+aether-los-link = "aether_engine.los_link:main"
+aether-quantum-diagnostics = "aether_engine.quantum_simulator:diagnostics_main"
+aether-quantum-simulate = "aether_engine.quantum_simulator:simulate_main"
+aether-master-matrix = "aether_master_matrix:main"
+galileo = "aether_engine.galileo_desktop:main"
+matrix-aristotle = "aether_engine.aristotle_desktop:main"
 
 [project.optional-dependencies]
-dev = ["httpx>=0.27.0", "mypy>=1.15.0", "numpy>=1.24", "pytest>=7.0.0", "ruff>=0.11.0"]
-build = ["pyinstaller>=6.22.0"]
-local-ai = ["llama-cpp-python>=0.3.0"]
-api = ["fastapi>=0.115.0", "pydantic>=2.8.0", "uvicorn>=0.30.0"]
-behavioral-demo = ["torch>=2.2.0"]
-command-center = ["numpy>=1.24"]
-ollama = ["ollama>=0.6.0"]
-spin-network = ["numpy>=1.24"]
-spin-network-visualization = ["numpy>=1.24", "matplotlib>=3.8"]
-secure-vault = ["cryptography>=42.0.0"]
+dev = ["build>=1.2.2", "httpx>=0.28.1", "mypy>=2.4.1", "numpy>=2.4.6", "pandas>=3.1.1", "pandas-stubs>=3.1.0.261029", "pytest>=9.2.0", "ruff>=0.17.4", "skyfield>=1.55", "types-ephem>=4.2.0.20260724"]
+build = ["pyinstaller>=6.22.3"]
+local-ai = ["llama-cpp-python>=0.3.36"]
+api = ["ephem>=4.2.1", "fastapi>=0.162.4", "pandas>=3.1.1", "pydantic>=2.14.3", "skyfield>=1.55", "uvicorn>=0.54.0"]
+calculator-api = ["fastapi>=0.162.4", "numpy>=2.4.6", "pydantic>=2.14.3", "uvicorn>=0.54.0"]
+behavioral-demo = ["torch>=2.15.0"]
+command-center = ["numpy>=2.4.6", "pandas>=3.1.1", "skyfield>=1.55"]
+ollama = ["ollama>=0.6.3"]
+spin-network = ["numpy>=2.4.6"]
+spin-network-visualization = ["numpy>=2.4.6", "matplotlib>=3.11.2"]
+secure-vault = ["cryptography>=50.0.2"]
+desktop = ["ephem>=4.2.1", "fastapi>=0.162.4", "numpy>=2.4.6", "pandas>=3.1.1", "pydantic>=2.14.3", "pywebview>=6.2.1", "skyfield>=1.55", "uvicorn>=0.54.0"]
+
+[tool.setuptools]
+py-modules = [
+    "aether_master_matrix",
+    "agent_governor",
+    "history_matrix_archive",
+    "workspace_matrix_bridge",
+]
+package-dir = {"" = ".", "aether_engine" = "src/aether_engine"}
 
 [tool.setuptools.packages.find]
-where = ["src"]
+where = ["src", "."]
+include = ["aether_engine*", "automator"]
+
+[tool.setuptools.package-data]
+aether_engine = ["galileo_assets/*", "galileo_voice.swift"]
+
+[tool.setuptools.data-files]
+"share/aether-engine/frontend" = ["frontend/aether_client.js"]
+"share/aether-engine/protocol" = [
+    "aether_protocol.schema.json",
+    "include/aether_bridge.h",
+    "src/aether_bridge.c",
+]
+"share/aether-engine/observatory" = [
+    "frontend/weather.html", "frontend/weather.css", "frontend/weather.js",
+    "frontend/stargazer.html", "frontend/stargazer.css", "frontend/stargazer.js",
+    "frontend/astronomy.css", "frontend/speech.js",
+]
 
 [tool.pytest.ini_options]
 pythonpath = ["src"]
@@ -44,6 +80,11 @@ select = ["E4", "E7", "E9", "F", "I"]
 
 [tool.mypy]
 python_version = "3.11"
-files = ["backup_replication.py", "src/aether_engine"]
+mypy_path = "src"
+files = ["backup_replication.py", "workspace_matrix_bridge.py", "src/aether_engine"]
 check_untyped_defs = true
 warn_unused_ignores = true
+
+[[tool.mypy.overrides]]
+module = ["skyfield.*"]
+ignore_missing_imports = true

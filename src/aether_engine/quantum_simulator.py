@@ -1,61 +1,79 @@
 from __future__ import annotations
 
-from typing import Final
+import argparse
+import json
+from typing import Sequence
+
+from .quantum_engine import (
+    MAX_CIRCUIT_GATES,
+    MAX_CIRCUIT_QUBITS,
+    MAX_MEASUREMENT_SHOTS,
+    QuantumGate,
+    QuantumStateSimulator,
+    StateCollapseAnomalyError,
+)
+from .system_diagnostics import (
+    DiagnosticStatus,
+    SystemDiagnosticCheck,
+    SystemDiagnosticScanner,
+    diagnostics_main,
+)
+
+__all__ = [
+    "DiagnosticStatus",
+    "MAX_CIRCUIT_GATES",
+    "MAX_CIRCUIT_QUBITS",
+    "MAX_MEASUREMENT_SHOTS",
+    "QuantumGate",
+    "QuantumStateSimulator",
+    "StateCollapseAnomalyError",
+    "SystemDiagnosticCheck",
+    "SystemDiagnosticScanner",
+    "diagnostics_main",
+    "simulate_main",
+]
 
 
-class StateCollapseAnomalyError(Exception):
-    """Raised when the simulated entropy index exceeds threshold stability boundaries."""
-    pass
+def simulate_main(argv: Sequence[str] | None = None) -> int:
+    parser = argparse.ArgumentParser(
+        prog="aether-quantum-simulate",
+        description="Simulate a bounded local state-vector quantum circuit.",
+    )
+    parser.add_argument("--qubits", type=int, required=True, help="Qubit count (1-12).")
+    parser.add_argument(
+        "--gates",
+        required=True,
+        metavar="JSON",
+        help='Gate list, e.g. \'[{"operation":"H","target":0}]\'',
+    )
+    parser.add_argument(
+        "--shots", type=int, default=1000, help="Measurements (1-10000)."
+    )
+    parser.add_argument("--seed", type=int, default=0, help="Reproducible shot seed.")
+    arguments = parser.parse_args(argv)
 
-
-class QuantumStateSimulator:
-    def __init__(
-        self, risk_coefficient: float = 0.30, fluctuation_velocity: float = 50.0
-    ) -> None:
-        """Initialize the simulator engine with user-adjustable wave characteristics."""
-        self.risk_coefficient: float = risk_coefficient
-        self.fluctuation_velocity: float = fluctuation_velocity
-        self.entropy_max: Final[float] = 100.0
-
-    def compute_wave_coherence(self) -> float:
-        """Calculate the localized phase coherence percentage of the system matrix."""
-        base_coherence = 1.0 - self.risk_coefficient
-        return round(base_coherence * 100.0, 1)
-
-    def calculate_entropy_index(self, state_density: float) -> float:
-        """Evaluate the structural thermal entropy metric of the fluid environment."""
-        calculated_entropy = (state_density * 0.5) + (self.fluctuation_velocity * 0.77)
-        bounded_entropy = min(calculated_entropy, self.entropy_max)
-
-        if bounded_entropy > 95.0:
-            raise StateCollapseAnomalyError(
-                f"System critical decoherence imminent at entropy: {bounded_entropy}"
-            )
-
-        return round(bounded_entropy, 1)
-
-    def render_operator_card(self, state_density: float = 57.0) -> None:
-        """Render a stylized, high-impact telemetry reporting card to the system console."""
-        coherence = self.compute_wave_coherence()
-        entropy = self.calculate_entropy_index(state_density)
-
-        print("\n" + "=" * 55)
-        print(" 🌌 AETHER COHERENT SUPERPOSITION STATUS ENGINE 🌌")
-        print("=" * 55)
-        print(f"  • Wave Coherence   : {coherence}%  [TARGET MATCH]")
-        print(f"  • State Density    : {state_density}ψ")
-        print(f"  • Entropy Index    : {entropy}   (Stability Threshold: 95.0)")
-        print("-" * 55)
-        print(
-            f"  • Risk Coefficient : {int(self.risk_coefficient * 100)}% "
-            "(Wave Collapse Rate)"
+    try:
+        gate_data = json.loads(arguments.gates)
+        if not isinstance(gate_data, list):
+            raise ValueError("--gates must be a JSON array.")
+        gates: list[QuantumGate] = []
+        for item in gate_data:
+            if not isinstance(item, dict):
+                raise ValueError("Each gate must be a JSON object.")
+            if set(item) - {"operation", "target", "control", "angle"}:
+                raise ValueError("A gate contains an unsupported field.")
+            gates.append(QuantumGate(**item))
+        result = QuantumStateSimulator().simulate_circuit(
+            arguments.qubits,
+            gates,
+            shots=arguments.shots,
+            seed=arguments.seed,
         )
-        print(
-            f"  • System Velocity  : {int(self.fluctuation_velocity)}Hz "
-            "(Fluctuation Cycle)"
-        )
-        print("  • Strategy Pattern : DYNAMIC BALANCE CONFIGURATION")
-        print("=" * 55 + "\n")
+    except (TypeError, ValueError) as error:
+        parser.error(str(error))
+
+    print(json.dumps(result, indent=2))
+    return 0
 
 
 if __name__ == "__main__":

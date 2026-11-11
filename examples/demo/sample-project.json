@@ -1,0 +1,66 @@
+{
+  "schema_version": 1,
+  "exported_at": "2026-11-11T12:00:00+00:00",
+  "tasks": [
+    {
+      "id": 1,
+      "title": "Choose a sunny garden site",
+      "description": "Compare the fictional courtyard locations and pick one with good afternoon light.",
+      "status": "done",
+      "priority": "normal",
+      "due_date": null,
+      "created_at": "2026-11-11T10:00:00+00:00",
+      "updated_at": "2026-11-11T11:00:00+00:00"
+    },
+    {
+      "id": 2,
+      "title": "Agree on the first planting list",
+      "description": "Choose a small mix of herbs and vegetables for the first season.",
+      "status": "done",
+      "priority": "normal",
+      "due_date": null,
+      "created_at": "2026-11-11T10:05:00+00:00",
+      "updated_at": "2026-11-11T11:05:00+00:00"
+    },
+    {
+      "id": 3,
+      "title": "Build two raised beds",
+      "description": "Measure the site and assemble the beds before adding soil.",
+      "status": "pending",
+      "priority": "high",
+      "due_date": null,
+      "created_at": "2026-11-11T11:10:00+00:00",
+      "updated_at": "2026-11-11T11:10:00+00:00"
+    },
+    {
+      "id": 4,
+      "title": "Set a volunteer planting day",
+      "description": "Pick a date after the beds are ready and invite neighbors.",
+      "status": "pending",
+      "priority": "normal",
+      "due_date": null,
+      "created_at": "2026-11-11T11:15:00+00:00",
+      "updated_at": "2026-11-11T11:15:00+00:00"
+    }
+  ],
+  "events": [
+    {
+      "id": 1,
+      "topic": "project",
+      "message": "Started the fictional community-garden plan.",
+      "created_at": "2026-11-11T10:00:00+00:00"
+    },
+    {
+      "id": 2,
+      "topic": "decision",
+      "message": "Selected the sunny courtyard site for the first garden beds.",
+      "created_at": "2026-11-11T11:00:00+00:00"
+    },
+    {
+      "id": 3,
+      "topic": "milestone",
+      "message": "Agreed on a starter planting list of herbs and vegetables.",
+      "created_at": "2026-11-11T11:05:00+00:00"
+    }
+  ]
+}

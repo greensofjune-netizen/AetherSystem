@@ -1,0 +1,387 @@
+.astrology-panel {
+  container-type: inline-size;
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+  padding-block: 28px;
+}
+
+.astrology-heading {
+  display: flex;
+  align-items: end;
+  justify-content: space-between;
+  gap: 24px;
+}
+
+.astrology-heading h2,
+.chart-card h3 {
+  margin: 8px 0 0;
+  font-family: Georgia, serif;
+  font-size: clamp(1.35rem, 1.1rem + 0.8vw, 1.75rem);
+  font-weight: 400;
+}
+
+.astrology-heading > p,
+.astro-location-help,
+.chart-caption,
+.number-note {
+  max-width: 58ch;
+  color: var(--muted);
+  font-size: 0.875rem;
+  line-height: 1.55;
+}
+
+.astrology-heading > p {
+  margin: 0;
+}
+
+.astrology-privacy {
+  margin: 0;
+  padding: 14px 16px;
+  border: 1px solid #55422c;
+  border-radius: 10px;
+  background: #211a14;
+  color: #d3c0a5;
+  font-size: 0.875rem;
+  line-height: 1.6;
+}
+
+.astrology-privacy strong {
+  color: var(--gold);
+}
+
+.astrology-form {
+  display: grid;
+  gap: 16px;
+}
+
+.astrology-form fieldset,
+.chart-card {
+  min-width: 0;
+  margin: 0;
+  padding: 18px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: linear-gradient(145deg, #201a15, #171310);
+}
+
+.astrology-form legend {
+  padding-inline: 8px;
+  color: #e8d2b2;
+  font-family: Georgia, serif;
+  font-size: 1.15rem;
+}
+
+.astro-fields {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 16px;
+}
+
+.astro-field {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 6px;
+}
+
+.astro-field label {
+  color: #ddc4a2;
+  font-size: 0.875rem;
+}
+
+.astro-field input,
+.astro-field select {
+  width: 100%;
+  min-height: 48px;
+  padding: 10px 12px;
+  border: 1px solid #65513d;
+  border-radius: 8px;
+  background: #120f0d;
+  color: var(--text);
+  font: inherit;
+  font-size: max(1rem, 1em);
+}
+
+.astro-field input:focus-visible,
+.astro-field select:focus-visible,
+.astro-submit:focus-visible,
+.astro-clear:focus-visible {
+  outline: 2px solid var(--gold);
+  outline-offset: 3px;
+}
+
+.astro-field input::placeholder {
+  color: #84796e;
+}
+
+.astro-field select {
+  appearance: none;
+  background-image: linear-gradient(45deg, transparent 50%, #d2b88f 50%), linear-gradient(135deg, #d2b88f 50%, transparent 50%);
+  background-position: calc(100% - 17px) 21px, calc(100% - 12px) 21px;
+  background-repeat: no-repeat;
+  background-size: 5px 5px, 5px 5px;
+}
+
+.astro-field small {
+  color: var(--muted);
+  font-size: 0.75rem;
+  line-height: 1.45;
+}
+
+.astro-location-help {
+  margin: 14px 0 0;
+}
+
+.astrology-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.astro-submit,
+.astro-clear {
+  min-height: 48px;
+  padding: 11px 16px;
+  border: 1px solid #765837;
+  border-radius: 9px;
+  font: inherit;
+}
+
+.astro-submit {
+  background: linear-gradient(110deg, #49321f, #302116);
+  color: #f5e1c4;
+  font-weight: 650;
+}
+
+.astro-clear {
+  border-color: var(--line);
+  background: #1c1713;
+  color: #d0bfa7;
+}
+
+.astro-submit:disabled {
+  cursor: wait;
+  opacity: 0.65;
+}
+
+.astrology-status {
+  min-height: 1.4em;
+  margin: 0;
+  color: #c6b598;
+  font-size: 0.875rem;
+}
+
+.astrology-result {
+  display: grid;
+  gap: 18px;
+}
+
+.astro-summary {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.summary-card {
+  padding: 16px;
+  border: 1px solid #5a432d;
+  border-radius: 10px;
+  background: radial-gradient(ellipse at 90% 0, #52351c, transparent 70%), #211a14;
+}
+
+.summary-card span,
+.summary-card strong {
+  display: block;
+}
+
+.summary-card span {
+  color: #bca27e;
+  font-size: 0.75rem;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+
+.summary-card strong {
+  margin-top: 8px;
+  color: #f3dfc0;
+  font-family: Georgia, serif;
+  font-size: 1.4rem;
+  font-weight: 400;
+}
+
+.astro-result-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 14px;
+}
+
+.chart-card h3 {
+  margin-bottom: 12px;
+}
+
+.chart-card figcaption h3 {
+  margin-bottom: 8px;
+}
+
+.chart-card svg {
+  display: block;
+  width: min(100%, 360px);
+  height: auto;
+  margin-inline: auto;
+  overflow: visible;
+}
+
+.chart-circle {
+  fill: #17120f;
+  stroke: #765a3a;
+  stroke-width: 1.2;
+}
+
+.chart-ring,
+.chart-spoke {
+  fill: none;
+  stroke: #59442e;
+  stroke-width: 1;
+}
+
+.chart-sign,
+.chart-house,
+.chart-planet {
+  text-anchor: middle;
+  dominant-baseline: middle;
+}
+
+.chart-sign {
+  fill: #e5bf83;
+  font-size: 16px;
+}
+
+.chart-house {
+  fill: #b59c79;
+  font-size: 9px;
+}
+
+.chart-planet {
+  fill: #f4e3c8;
+  font-size: 12px;
+  paint-order: stroke;
+  stroke: #17120f;
+  stroke-width: 2px;
+}
+
+.chart-caption {
+  margin: 8px 0 0;
+  text-align: center;
+}
+
+.astro-table-wrap {
+  overflow-x: auto;
+}
+
+.astro-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.875rem;
+  text-align: left;
+}
+
+.astro-table th,
+.astro-table td {
+  padding: 10px 8px;
+  border-bottom: 1px solid #392e24;
+  white-space: nowrap;
+}
+
+.astro-table th {
+  color: #c6a77c;
+  font-size: 0.75rem;
+  font-weight: 600;
+}
+
+.astro-table td {
+  color: #e7d8c4;
+}
+
+.house-list {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.house-list li {
+  padding: 10px;
+  border: 1px solid #3c3024;
+  border-radius: 8px;
+  color: #e4d3bb;
+  font-size: 0.875rem;
+}
+
+.house-list span {
+  display: block;
+  margin-bottom: 3px;
+  color: #aa9070;
+  font-size: 0.75rem;
+}
+
+.number-list {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 9px;
+  margin: 0;
+}
+
+.number-list div {
+  padding: 11px;
+  border: 1px solid #3c3024;
+  border-radius: 8px;
+}
+
+.number-list dt {
+  color: #bba27f;
+  font-size: 0.75rem;
+}
+
+.number-list dd {
+  margin: 5px 0 0;
+  color: #f0d6aa;
+  font-family: Georgia, serif;
+  font-size: 1.5rem;
+}
+
+.number-note {
+  margin: 12px 0 0;
+}
+
+@container (max-width: 760px) {
+  .astrology-heading {
+    align-items: flex-start;
+    flex-direction: column;
+    gap: 8px;
+  }
+
+  .astro-fields,
+  .astro-result-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .astro-summary {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .astro-summary .summary-card {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 12px;
+  }
+
+  .astro-summary .summary-card strong {
+    margin-top: 0;
+    text-align: right;
+  }
+}

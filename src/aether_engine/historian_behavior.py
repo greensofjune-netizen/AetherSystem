@@ -12,6 +12,8 @@ from collections.abc import Sequence
 from pathlib import Path
 from typing import Any
 
+from .multimodal import ImageAttachment, validate_image_batch
+
 _CONFIG_SUFFIXES = {".py", ".json", ".yaml", ".yml", ".ini", ".toml"}
 _EXCLUDED_DIRECTORIES = {
     ".git",
@@ -102,10 +104,18 @@ class AetherHistorian:
         self.timeout = timeout
         self.endpoint = "/api/generate"
 
-    def query_brain(self, prompt: str, *, system: str | None = None) -> str:
+    def query_brain(
+        self,
+        prompt: str,
+        *,
+        system: str | None = None,
+        images: list[ImageAttachment] | None = None,
+    ) -> str:
         """Request one non-streaming response from the local Ollama API."""
         if not isinstance(prompt, str) or not prompt.strip():
             raise ValueError("Prompt cannot be empty.")
+        if images:
+            validate_image_batch(images)
 
         payload = {
             "model": self.model,
@@ -113,6 +123,8 @@ class AetherHistorian:
             "stream": False,
             "options": {"temperature": 0.2},
         }
+        if images:
+            payload["images"] = [image.data for image in images]
         if system is not None:
             if not isinstance(system, str) or not system.strip():
                 raise ValueError("System instruction cannot be empty.")
@@ -580,7 +592,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     parser.add_argument(
         "--telemetry",
         action="store_true",
-        help="ask aethersystem-core to review the unverified historian archive",
+        help="ask Aristotle (local aethersystem-core model) to review the unverified historian archive",
     )
     parser.add_argument("--ollama-host", default="localhost")
     parser.add_argument("--ollama-port", type=int, default=11434)
@@ -602,7 +614,7 @@ def main(argv: Sequence[str] | None = None) -> int:
                 model=arguments.ollama_model,
                 timeout=arguments.ollama_timeout,
             )
-            print("\n=== Local Core Intelligence Feedback ===")
+            print("\n=== Aristotle | Local Core Intelligence Feedback ===")
             print(historian.run_historian_telemetry())
         if arguments.train:
             run_llm_pipeline(
