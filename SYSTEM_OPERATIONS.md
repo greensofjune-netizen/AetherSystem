@@ -288,6 +288,16 @@ uncertain-outcome error; reconnecting reloads backend status without retrying
 the mutation. Writes are serialized and never applied optimistically.
 An intercepted lost acknowledgement after a real committed update separately
 verifies reconciliation to the saved status without a repeated POST.
+Filter/search journeys verify the existing status and title/description query
+contract, combined criteria, literal wildcard characters, clear-search behavior
+and honest empty results. Applied views and independent creation/search drafts
+must survive manual refresh, polling, writes and same-address outage/recovery.
+An unavailable backend hides successful empty-state messages and labels retained
+rows as potentially stale or from the previous view. Delayed responses from a
+previous query must never render under a newly applied view. Completing/reopening
+a task that leaves the view moves keyboard focus to Refresh tasks; creating a
+task resets only its creation form. Reload intentionally resets filters/drafts;
+no browser persistence is promised.
 These are Chromium checks,
 not native desktop or cross-browser certification.
 No live model or real project database is used. The independent lab's Node.js/

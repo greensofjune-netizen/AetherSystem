@@ -22,6 +22,9 @@
         #task-panel { margin-block-end: 20px; }
         #task-panel label { display: block; margin-block: 12px 4px; }
         #task-panel input { box-sizing: border-box; width: 100%; padding: 12px; min-height: 48px; font: inherit; background: #0a0e14; color: #e1e7f0; border: 1px solid #8fa0b5; border-radius: 4px; }
+        #task-panel input[type="radio"] { width: auto; min-height: auto; margin-inline-end: 8px; accent-color: #4fc1ff; }
+        #task-panel .task-status-options { display: flex; flex-wrap: wrap; gap: 16px; }
+        #task-panel .task-status-options label { display: flex; align-items: center; min-height: 48px; margin: 0; }
         #task-panel button { min-height: 48px; font-size: 1rem; }
         #task-panel :focus-visible { outline: 3px solid #4fc1ff; outline-offset: 3px; }
         #task-panel fieldset { border: 0; padding: 0; margin: 0; }
@@ -42,6 +45,22 @@
         <p id="task-connection" role="status">Connecting to task backend...</p>
         <p id="task-notice" role="status"></p>
         <p id="task-error" role="alert"></p>
+        <form id="task-filters" action="/api/v1/tasks" method="get" aria-describedby="task-filter-help">
+            <fieldset id="task-filter-fields" disabled>
+                <legend>Filter project tasks</legend>
+                <div class="task-status-options">
+                    <label for="task-status-all"><input id="task-status-all" type="radio" name="status" value="" checked>All</label>
+                    <label for="task-status-pending"><input id="task-status-pending" type="radio" name="status" value="pending">Pending</label>
+                    <label for="task-status-done"><input id="task-status-done" type="radio" name="status" value="done">Done</label>
+                </div>
+                <label for="task-search">Search tasks</label>
+                <input id="task-search" name="search" type="search" maxlength="500" spellcheck="false" autocapitalize="off" autocorrect="off">
+                <p id="task-filter-help">Search titles and descriptions using the task API.
+                    Choose a status and press Apply filters (or Enter in search).
+                    Clear search and choose All to show every task.</p>
+                <button type="submit">Apply filters</button>
+            </fieldset>
+        </form>
         <form id="task-form" action="/api/v1/tasks" method="post" aria-describedby="task-help">
             <fieldset id="task-fields" disabled>
                 <legend>Create a project task</legend>
@@ -52,6 +71,7 @@
         </form>
         <noscript>Task controls require JavaScript. Use the CLI or <a href="/docs">API documentation</a> instead.</noscript>
         <button type="button" class="secondary" id="task-refresh">Refresh tasks</button>
+        <p id="task-empty" role="status" hidden>No tasks match the applied filters.</p>
         <ul id="task-list" aria-label="Project tasks"></ul>
     </section>
     

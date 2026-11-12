@@ -8,8 +8,13 @@
     const connection = document.getElementById('task-connection');
     const notice = document.getElementById('task-notice');
     const error = document.getElementById('task-error');
+    const filters = document.getElementById('task-filters');
+    const filterFields = document.getElementById('task-filter-fields');
+    const empty = document.getElementById('task-empty');
     let loading = null;
     let saving = false;
+    let viewPath = '/api/v1/tasks';
+    let viewLabel = 'All tasks';
 
     async function requestTasks(options = {}, path = '/api/v1/tasks') {
         const response = await fetch(path, {
@@ -42,12 +47,17 @@
         });
         list.replaceChildren(...rows);
         if (focusedId) list.querySelector(`[data-task-id="${focusedId}"] button`)?.focus();
-        connection.textContent = `Task backend connected. ${tasks.length} task(s).`;
+        empty.textContent = viewPath === '/api/v1/tasks'
+            ? 'No tasks yet. Add a task to get started.'
+            : 'No tasks match the applied filters.';
+        empty.hidden = tasks.length !== 0;
+        connection.textContent = `Task backend connected. ${tasks.length} task(s). View: ${viewLabel}.`;
     }
 
     function setSaving(value) {
         saving = value;
         fields.disabled = value;
+        filterFields.disabled = value;
         list.querySelectorAll('button').forEach((button) => { button.disabled = value; });
     }
 
@@ -70,16 +80,21 @@
         }
         await loadTasks();
         if (restoreFocus && (document.activeElement === document.body || list.contains(document.activeElement))) {
-            list.querySelector(`[data-task-id="${taskId}"] button`)?.focus();
+            (list.querySelector(`[data-task-id="${taskId}"] button`) || refresh).focus();
         }
     }
 
     function loadTasks() {
         if (saving) return Promise.resolve();
-        if (loading) return loading;
+        if (loading) return loading.then(() => loadTasks());
+        const path = viewPath;
         refresh.disabled = true;
-        loading = requestTasks().then(renderTasks).catch((failure) => {
-            connection.textContent = `Task backend unavailable. Displayed tasks may be stale. ${failure.message}`;
+        loading = requestTasks({}, path).then((tasks) => {
+            if (path === viewPath) renderTasks(tasks);
+        }).catch((failure) => {
+            if (path !== viewPath) return;
+            empty.hidden = true;
+            connection.textContent = `Task backend unavailable. Displayed tasks may be stale or from the previous view. Requested view: ${viewLabel}. ${failure.message}`;
         }).finally(() => {
             loading = null;
             refresh.disabled = false;
@@ -88,6 +103,21 @@
     }
 
     fields.disabled = false;
+    filterFields.disabled = false;
+    filters.addEventListener('submit', (event) => {
+        event.preventDefault();
+        if (saving) return;
+        const selected = filters.querySelector('input[name="status"]:checked');
+        const search = document.getElementById('task-search').value.trim();
+        const query = new URLSearchParams();
+        if (selected.value) query.set('status', selected.value);
+        if (search) query.set('search', search);
+        viewPath = `/api/v1/tasks${query.size ? `?${query}` : ''}`;
+        viewLabel = `${selected.value || 'All'} tasks${search ? ` matching "${search}"` : ''}`;
+        empty.hidden = true;
+        connection.textContent = `Loading tasks. Displayed tasks may be from the previous view. Requested view: ${viewLabel}.`;
+        loadTasks();
+    });
     form.addEventListener('submit', async (event) => {
         event.preventDefault();
         if (saving) return;

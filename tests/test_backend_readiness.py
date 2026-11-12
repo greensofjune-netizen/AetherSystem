@@ -410,6 +410,191 @@ def test_monitor_task_status_lifecycle_and_outage_recovery(tmp_path: Path) -> No
         page.close()
 
 
+def test_monitor_filters_search_drafts_and_outage_recovery(tmp_path: Path) -> None:
+    from playwright.sync_api import expect, sync_playwright
+
+    with sync_playwright() as playwright, playwright.chromium.launch() as browser:
+        page = browser.new_page(viewport={"width": 390, "height": 844})
+        with running_backend(tmp_path) as client:
+            port = client.base_url.port
+            assert port is not None
+            saved = []
+            for title, description in (
+                ("Alpha pending", ""),
+                ("Alpha finished", ""),
+                ("Beta pending", "Description needle"),
+                ("Literal %_ marker", ""),
+            ):
+                created = client.post(
+                    "/api/v1/tasks", json={"title": title, "description": description}
+                )
+                assert created.status_code == 201, created.text
+                saved.append(created.json())
+            completed = client.post(f"/api/v1/tasks/{saved[1]['id']}/complete")
+            assert completed.status_code == 200, completed.text
+            baseline = client.get("/api/v1/export")
+            assert baseline.status_code == 200, baseline.text
+            page.goto(f"{client.base_url}/monitor")
+            rows = page.locator("#task-list li")
+            expect(rows).to_have_count(4)
+            draft = page.get_by_label("Task title (required)")
+            draft.fill("Unsaved creation draft")
+            search = page.get_by_label("Search tasks", exact=True)
+            apply = page.get_by_role("button", name="Apply filters", exact=True)
+
+            def choose(status: str, term: str, expected_ids: list[int]) -> None:
+                page.get_by_role("radio", name=status, exact=True).check()
+                search.fill(term)
+                search.press("Enter")
+                expect(rows).to_have_count(len(expected_ids))
+                expect(page.locator("#task-connection")).to_contain_text("connected.")
+                assert rows.evaluate_all(
+                    "(items) => items.map(item => Number(item.dataset.taskId))"
+                ) == expected_ids
+                expect(draft).to_have_value("Unsaved creation draft")
+
+            choose("Pending", "", [saved[3]["id"], saved[2]["id"], saved[0]["id"]])
+            choose("Done", "", [saved[1]["id"]])
+            choose("All", "Alpha", [saved[1]["id"], saved[0]["id"]])
+            choose("Pending", "Alpha", [saved[0]["id"]])
+            page.get_by_role(
+                "button", name=f"Complete task #{saved[0]['id']}", exact=True
+            ).click()
+            expect(rows).to_have_count(0)
+            expect(page.locator("#task-empty")).to_be_visible()
+            expect(page.get_by_role("button", name="Refresh tasks", exact=True)).to_be_focused()
+            choose("Done", "Alpha", [saved[1]["id"], saved[0]["id"]])
+            page.get_by_role(
+                "button", name=f"Reopen task #{saved[0]['id']}", exact=True
+            ).click()
+            expect(rows).to_have_count(1)
+            expect(rows).to_have_attribute("data-task-id", str(saved[1]["id"]))
+            choose("All", "Description needle", [saved[2]["id"]])
+            choose("All", "%_", [saved[3]["id"]])
+            choose("All", "no matching task", [])
+            expect(page.locator("#task-empty")).to_be_visible()
+            choose("All", "   ", [task["id"] for task in reversed(saved)])
+            expect(page.locator("#task-empty")).to_be_hidden()
+            choose("Done", "Alpha", [saved[1]["id"]])
+            page.get_by_role("button", name="Refresh tasks", exact=True).click()
+            expect(page.locator("#task-connection")).to_contain_text("connected.")
+            expect(rows).to_have_count(1)
+            expect(search).to_have_value("Alpha")
+            expect(page.get_by_role("radio", name="Done", exact=True)).to_be_checked()
+            expect(draft).to_have_value("Unsaved creation draft")
+            before_outage = client.get("/api/v1/export")
+            assert before_outage.status_code == 200, before_outage.text
+            for original, actual in zip(
+                baseline.json()["tasks"], before_outage.json()["tasks"], strict=True
+            ):
+                if original["id"] == saved[0]["id"]:
+                    assert actual == {**original, "updated_at": actual["updated_at"]}
+                else:
+                    assert actual == original
+            assert before_outage.json()["events"] == baseline.json()["events"]
+
+        page.get_by_role("radio", name="Pending", exact=True).check()
+        search.fill("Beta")
+        apply.click()
+        expect(page.locator("#task-connection")).to_contain_text("unavailable", timeout=10000)
+        expect(page.locator("#task-connection")).to_contain_text("previous view")
+        expect(rows).to_have_count(1)
+        expect(rows).to_have_attribute("data-task-id", str(saved[1]["id"]))
+        expect(page.locator("#task-empty")).to_be_hidden()
+        expect(draft).to_have_value("Unsaved creation draft")
+        expect(search).to_have_value("Beta")
+        expect(page.get_by_role("radio", name="Pending", exact=True)).to_be_checked()
+
+        with running_backend(tmp_path, port=port) as client:
+            expect(page.locator("#task-connection")).to_contain_text("connected.", timeout=15000)
+            expect(rows).to_have_count(1)
+            expect(rows).to_have_attribute("data-task-id", str(saved[2]["id"]))
+            expect(search).to_have_value("Beta")
+            expect(page.get_by_role("radio", name="Pending", exact=True)).to_be_checked()
+            expect(draft).to_have_value("Unsaved creation draft")
+            # An unapplied search draft must not change the active view on polling.
+            search.fill("Not applied yet")
+            with page.expect_response(
+                lambda response: response.url.endswith("?status=pending&search=Beta")
+            ):
+                page.get_by_role("button", name="Refresh tasks", exact=True).click()
+            expect(page.locator("#task-connection")).to_contain_text('matching "Beta"')
+            expect(rows).to_have_attribute("data-task-id", str(saved[2]["id"]))
+            expect(search).to_have_value("Not applied yet")
+            final = client.get("/api/v1/export")
+            assert final.status_code == 200, final.text
+            assert final.json()["tasks"] == before_outage.json()["tasks"]
+            assert final.json()["events"] == before_outage.json()["events"]
+            choose("Pending", "Absent task", [])
+            expect(page.locator("#task-empty")).to_be_visible()
+        expect(page.locator("#task-connection")).to_contain_text("unavailable", timeout=15000)
+        expect(page.locator("#task-empty")).to_be_hidden()
+        expect(draft).to_have_value("Unsaved creation draft")
+        with running_backend(tmp_path, port=port) as client:
+            expect(page.locator("#task-connection")).to_contain_text("connected.", timeout=15000)
+            expect(page.locator("#task-empty")).to_be_visible()
+            expect(rows).to_have_count(0)
+            expect(search).to_have_value("Absent task")
+            expect(page.get_by_role("radio", name="Pending", exact=True)).to_be_checked()
+            expect(draft).to_have_value("Unsaved creation draft")
+            # Saving resets only the creation form, not the applied view.
+            page.get_by_role("button", name="Add task", exact=True).click()
+            expect(page.locator("#task-notice")).to_contain_text("Saved task #")
+            expect(draft).to_have_value("")
+            expect(page.locator("#task-empty")).to_be_visible()
+            expect(rows).to_have_count(0)
+            expect(search).to_have_value("Absent task")
+            expect(page.get_by_role("radio", name="Pending", exact=True)).to_be_checked()
+            exported = client.get("/api/v1/export")
+            assert exported.status_code == 200, exported.text
+            assert len(exported.json()["tasks"]) == 5
+            assert [
+                task["title"] for task in exported.json()["tasks"]
+                if task["id"] not in {original["id"] for original in saved}
+            ] == ["Unsaved creation draft"]
+        page.close()
+
+
+def test_monitor_filter_change_ignores_outdated_response(tmp_path: Path) -> None:
+    from playwright.sync_api import expect, sync_playwright
+
+    with running_backend(tmp_path) as client:
+        created = client.post("/api/v1/tasks", json={"title": "Alpha pending"})
+        assert created.status_code == 201, created.text
+        completed = client.post("/api/v1/tasks", json={"title": "Alpha done"})
+        assert completed.status_code == 201, completed.text
+        done = client.post(f"/api/v1/tasks/{completed.json()['id']}/complete")
+        assert done.status_code == 200, done.text
+        with sync_playwright() as playwright, playwright.chromium.launch() as browser:
+            page = browser.new_page()
+            page.goto(f"{client.base_url}/monitor")
+            expect(page.locator("#task-list li")).to_have_count(2)
+            held = []
+            page.route("**/api/v1/tasks?search=Alpha", lambda route: held.append(route), times=1)
+            search = page.get_by_label("Search tasks", exact=True)
+            search.fill("Alpha")
+            search.press("Enter")
+            expect(page.get_by_role("button", name="Refresh tasks", exact=True)).to_be_disabled()
+            page.get_by_role("radio", name="Done", exact=True).check()
+            page.get_by_role("button", name="Apply filters", exact=True).click()
+            page.evaluate("""() => {
+                window.renderedCounts = [];
+                const list = document.getElementById('task-list');
+                new MutationObserver(() => window.renderedCounts.push(list.children.length))
+                    .observe(list, { childList: true });
+            }""")
+            assert len(held) == 1
+            held[0].fulfill(response=held[0].fetch())
+            expect(page.locator("#task-list li")).to_have_count(1)
+            expect(page.locator("#task-list li")).to_have_attribute(
+                "data-task-id", str(completed.json()["id"])
+            )
+            expect(page.locator("#task-connection")).to_contain_text('done tasks matching "Alpha"')
+            expect(page.locator("#task-empty")).to_be_hidden()
+            assert page.evaluate("window.renderedCounts") == [1]
+            page.close()
+
+
 def test_dispatch_rate_limit_preserves_data_and_recovers(tmp_path: Path) -> None:
     envelope = {
         "protocol_version": "1.0.0",

@@ -416,6 +416,11 @@ outage must show an error without changing the displayed status; reconnecting
 reconciles from the backend without retrying the update or duplicating tasks.
 It also drops one response after a real committed update to verify that an
 uncertain acknowledgement reconciles to the saved status without another POST.
+Filter/search journeys verify All/Pending/Done, combined title/description search,
+literal wildcard characters and empty results. Applied views and unsaved creation
+drafts survive refreshes and real outages; failed reads hide successful empty-state
+messages and label preserved rows as stale or from the previous view. Older
+in-flight responses cannot overwrite a newly applied view.
 These checks cover Chromium, not native desktop UI or
 every browser.
 It runs in CI too. Run it alone with
@@ -526,12 +531,21 @@ The local REST API is available with `python -m pip install -e ".[api]"`. Run th
 Open `http://127.0.0.1:8000/monitor` for the main API's task panel.
 It lists, creates, completes and reopens real tasks in the API's selected database, refreshes every
 five seconds, and reconnects when the backend returns at the same address.
+Choose **All**, **Pending** or **Done**, optionally enter **Search tasks**, then
+press **Apply filters** (or Enter in search). Search matches titles and descriptions,
+including literal `%` and `_` characters. Clear search and choose All to show
+every task. Applied filters persist during refreshes, writes and reconnection
+in the open page; edits to filter controls take effect only when applied.
+The creation draft is separate and is not reset by filtering. Page reload resets
+the view and unsaved drafts; they are not saved to browser storage.
 **Add task, Complete and Reopen write real data**; choose a temporary `AETHER_DATABASE_PATH` for
 testing. The panel requires JavaScript and same-origin loopback access; it does
 not embed a remote API token. Visible errors preserve drafts and mark the last
 task list as potentially stale. Status is not changed optimistically; the
 panel reloads the backend records after an update and restores keyboard focus
-to that task's action. Writes are serialized while a request is pending.
+to that task's action, or Refresh tasks if the task leaves the filtered view.
+Empty results are shown only after a successful read, never as an outage fallback.
+Writes are serialized while a request is pending.
 A failed save or status update is never retried automatically:
 if an acknowledgement is lost, refresh and check the list before submitting
 again. The API does not provide idempotency keys. Other legacy telemetry and
