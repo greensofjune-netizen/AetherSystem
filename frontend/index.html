@@ -2,6 +2,7 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>Aether Matrix Engine Supervisor</title>
     <style>
         body { background: #0f141c; color: #e1e7f0; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; margin: 30px; }
@@ -18,12 +19,43 @@
         button.secondary { background: #233043; border: 1px solid #387eff; color: #4fc1ff; }
         button.secondary:hover { background: #2d3f58; }
         pre { background: #0a0e14; padding: 12px; border-radius: 6px; overflow-x: auto; font-size: 0.85rem; border: 1px solid #1a2635; max-height: 180px; }
+        #task-panel { margin-block-end: 20px; }
+        #task-panel label { display: block; margin-block: 12px 4px; }
+        #task-panel input { box-sizing: border-box; width: 100%; padding: 12px; min-height: 48px; font: inherit; background: #0a0e14; color: #e1e7f0; border: 1px solid #8fa0b5; border-radius: 4px; }
+        #task-panel button { min-height: 48px; font-size: 1rem; }
+        #task-panel :focus-visible { outline: 3px solid #4fc1ff; outline-offset: 3px; }
+        #task-panel fieldset { border: 0; padding: 0; margin: 0; }
+        #task-panel button:disabled { opacity: 0.6; cursor: wait; }
+        #task-list li { margin-block: 12px; overflow-wrap: anywhere; }
+        #task-error { color: #ffb703; }
     </style>
 </head>
 <body>
 
     <h2>🧭 Aether Matrix System Monitor</h2>
+
+    <section class="card" id="task-panel" aria-labelledby="task-heading">
+        <h3 id="task-heading">Project tasks</h3>
+        <p id="task-help">Tasks are stored by this Aether API. The list refreshes every five seconds.
+            Failed saves are never retried automatically.</p>
+        <p id="task-connection" role="status">Connecting to task backend...</p>
+        <p id="task-notice" role="status"></p>
+        <p id="task-error" role="alert"></p>
+        <form id="task-form" action="/api/v1/tasks" method="post" aria-describedby="task-help">
+            <fieldset id="task-fields" disabled>
+                <legend>Create a project task</legend>
+                <label for="task-title">Task title (required)</label>
+                <input id="task-title" name="title" required maxlength="500">
+                <button type="submit" id="task-save">Add task</button>
+            </fieldset>
+        </form>
+        <noscript>Task controls require JavaScript. Use the CLI or <a href="/docs">API documentation</a> instead.</noscript>
+        <button type="button" class="secondary" id="task-refresh">Refresh tasks</button>
+        <ul id="task-list" aria-label="Project tasks"></ul>
+    </section>
     
+    <p>Telemetry and snapshot controls below require optional dashboard routes.
+        The task API alone does not provide those routes.</p>
     <div class="grid">
         <!-- STORAGE CONTROLLER PANEL -->
         <div class="card">
@@ -50,6 +82,7 @@
         <pre id="console-stream">Initializing monitoring pipeline matrix...</pre>
     </div>
 
+    <script src="/monitor_tasks.js" defer></script>
     <script>
         const logBox = document.getElementById('console-stream');
 

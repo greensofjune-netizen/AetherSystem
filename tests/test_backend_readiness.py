@@ -25,7 +25,8 @@ from threading import Thread
 import uvicorn
 
 with socket.socket() as listener:
-    listener.bind(("127.0.0.1", 0))
+    listener.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+    listener.bind(("127.0.0.1", int(sys.argv[2])))
     listener.listen(128)
     server = uvicorn.Server(uvicorn.Config(
         "aether_engine.server:app", log_level="warning", access_log=False,
@@ -44,7 +45,7 @@ with socket.socket() as listener:
 
 @contextmanager
 def running_backend(
-    directory: Path, *, abrupt_stop: bool = False,
+    directory: Path, *, abrupt_stop: bool = False, port: int = 0,
 ) -> Iterator[httpx.Client]:
     port_file = directory / "port.txt"
     port_file.unlink(missing_ok=True)
@@ -60,7 +61,7 @@ def running_backend(
     log_path = directory / "server.log"
     with log_path.open("w", encoding="utf-8") as log:
         process = subprocess.Popen(
-            [sys.executable, "-c", SERVER, str(port_file)],
+            [sys.executable, "-c", SERVER, str(port_file), str(port)],
             cwd=directory,
             env=environment,
             stdin=subprocess.PIPE,
@@ -208,6 +209,84 @@ def test_backend_readiness_task_dispatch_reconnect_and_restart(tmp_path: Path) -
         replay = read_dispatch(client, first_id)
         assert replay["event_id"] == second_id
         assert replay["envelope"] == envelope
+
+
+def test_monitor_task_creation_restart_and_outage_recovery(tmp_path: Path) -> None:
+    from playwright.sync_api import expect, sync_playwright
+
+    with sync_playwright() as playwright, playwright.chromium.launch() as browser:
+        page = browser.new_page(viewport={"width": 390, "height": 844})
+        page_errors = []
+        task_posts = []
+        page.on("pageerror", lambda error: page_errors.append(str(error)))
+        page.on(
+            "request",
+            lambda request: task_posts.append(request)
+            if request.method == "POST" and request.url.endswith("/api/v1/tasks")
+            else None,
+        )
+        with running_backend(tmp_path) as client:
+            port = client.base_url.port
+            assert port is not None
+            page.goto(f"{client.base_url}/monitor")
+            expect(page.locator("#task-connection")).to_contain_text("connected.")
+            title = page.get_by_label("Task title (required)")
+            title.fill("Browser-created persistent task")
+            title.press("Enter")
+            expect(page.locator("#task-notice")).to_contain_text("Saved task #")
+            expect(page.locator("#task-list li")).to_have_count(1)
+            saved = client.get("/api/v1/export")
+            assert saved.status_code == 200, saved.text
+            original = saved.json()["tasks"]
+            assert len(original) == 1
+            assert original[0]["title"] == "Browser-created persistent task"
+            expect(page.locator("#task-list li")).to_have_attribute(
+                "data-task-id", str(original[0]["id"])
+            )
+            assert len(task_posts) == 1
+            title.fill("   ")
+            page.get_by_role("button", name="Add task", exact=True).click()
+            expect(page.get_by_role("alert")).to_contain_text("Task title")
+            expect(title).to_have_value("   ")
+            expect(page.locator("#task-list li")).to_have_count(1)
+            assert len(task_posts) == 2
+
+        page.get_by_role("button", name="Refresh tasks", exact=True).click()
+        expect(page.locator("#task-connection")).to_contain_text("unavailable", timeout=10000)
+        expect(page.locator("#task-list li")).to_have_count(1)
+        title.fill("Draft retained during outage")
+        page.get_by_role("button", name="Add task", exact=True).click()
+        expect(page.get_by_role("alert")).to_contain_text("Save not confirmed")
+        expect(title).to_have_value("Draft retained during outage")
+        expect(page.locator("#task-notice")).to_be_empty()
+        expect(page.locator("#task-list li")).to_have_count(1)
+
+        with running_backend(tmp_path, port=port) as client:
+            expect(page.locator("#task-connection")).to_contain_text("connected.", timeout=15000)
+            expect(page.locator("#task-list li")).to_have_count(1)
+            recovered = client.get("/api/v1/export")
+            assert recovered.status_code == 200, recovered.text
+            assert recovered.json()["tasks"] == original
+            assert len(task_posts) == 3, "Outage saves must not be retried automatically"
+            expect(title).to_have_value("Draft retained during outage")
+            page.get_by_role("button", name="Refresh tasks", exact=True).click()
+            expect(page.locator("#task-connection")).to_contain_text("connected.")
+            expect(page.locator("#task-list li")).to_have_count(1)
+            page.get_by_role("button", name="Add task", exact=True).click()
+            expect(page.locator("#task-notice")).to_contain_text("Saved task #")
+            expect(page.get_by_role("alert")).to_be_empty()
+            expect(title).to_have_value("")
+            expect(page.locator("#task-list li")).to_have_count(2)
+            final = client.get("/api/v1/export")
+            assert final.status_code == 200, final.text
+            assert final.json()["tasks"][:1] == original
+            assert len(final.json()["tasks"]) == 2
+            assert final.json()["tasks"][1]["title"] == "Draft retained during outage"
+            assert len(task_posts) == 4
+            page.reload()
+            expect(page.locator("#task-list li")).to_have_count(2)
+            assert not page_errors
+        page.close()
 
 
 def test_dispatch_rate_limit_preserves_data_and_recovers(tmp_path: Path) -> None:

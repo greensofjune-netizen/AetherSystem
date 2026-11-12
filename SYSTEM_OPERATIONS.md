@@ -74,6 +74,7 @@ flowchart LR
 | --- | --- | --- |
 | Core CLI | `aether-engine` directly opens its selected local task/event database. | It does not need an HTTP server or model. Pass `--database` explicitly to choose a store. |
 | Aether API | `aether-server` defaults to `127.0.0.1:8000`; HTTP clients use its task, event, backup, chat and unified routes. | It defaults to a project-local database, or `AETHER_DATABASE_PATH`. The CLI's `--database` and the API's environment setting are independent and must point to the same file to share records. |
+| API monitor task panel | `/monitor` on the Aether API lists/creates tasks and polls the same-origin task endpoint every five seconds. | Requires JavaScript and loopback access, uses the API's selected database, retains drafts on failed saves, and does not retry writes automatically. Its legacy telemetry/snapshot controls need separate optional dashboard routes. |
 | Galileo and Aristotle | Their desktop launcher starts a private ephemeral loopback server. Desktop chat uses local Ollama; Aristotle adds archive and simulated Matrix views. | Conversations use a separate Galileo database. Archive access and confirmed Automator actions are separate from chat. Neither app requires the main Aether API for its own chat. |
 | Master Matrix and Copernicus | Independent loopback servers with their own browser routes and local Ollama chat. | They are not aliases for the Aether API or each other. Matrix's dashboard and the Aether API both default to port 8000, so configure distinct ports if running both. The Copernicus shell defaults to port 8765. |
 | Formula tools | Galileo and the separate calculator API expose formula routes; CLI tools can run calculations directly. | Results are simulations or estimates, not physical measurements. The hosted calculator path is separate from the main API. |
@@ -215,6 +216,10 @@ node tests/test_validation_types.ts
 npm exec --yes --package=typescript@5.9.3 -- tsc --noEmit --strict --target ES2020 --module NodeNext --moduleResolution NodeNext --allowImportingTsExtensions tests/test_validation_types.ts
 ```
 
+Install the dev extra and Playwright's Chromium before running pytest:
+`python -m playwright install chromium` (Linux may need `--with-deps`).
+The main monitor browser journey runs inside pytest and fails explicitly if
+these prerequisites are absent; Automator does not install them.
 Use Node.js 24 for the validation checks. For the independent lab, follow its
 [test instructions](./quantum-lab/README.md); its browser tests and the
 native desktop UI require their own dependencies and environment. CI tests
@@ -268,8 +273,16 @@ that header without restarting, dispatch, live SSE delivery and replay must
 recover, with exact stored records. Allow approximately one extra minute
 for this bounded drill; it does not certify throughput or denial-of-service
 resistance.
-No live model or real project database is used. Node.js, browser and native
-UI checks remain separate.
+The monitor journey uses headless Chromium and the actual `/monitor` form.
+It creates a task, compares the API record, stops the temporary server, checks
+visible outage errors and draft retention, and restarts on the same address.
+The still-open page must reconnect without duplicate tasks or automatic write
+retries; an explicit subsequent save and reload must match stored records.
+Server-side validation feedback is also checked. Source and installed monitor
+assets and wheel contents have separate coverage. These are Chromium checks,
+not native desktop or cross-browser certification.
+No live model or real project database is used. The independent lab's Node.js/
+browser suite and native UI checks remain separate.
 
 For a non-destructive local CLI smoke test, use a **new empty directory** and
 explicitly point the CLI at a database inside it:

@@ -51,6 +51,12 @@ def test_distribution_is_licensed_and_core_runs_without_extras(tmp_path: Path) -
             for name in names
         )
         metadata_path = next(name for name in names if name.endswith("/METADATA"))
+        for asset in ("index.html", "monitor_tasks.js", "aether_client.js"):
+            asset_path = next(
+                name for name in names
+                if name.endswith(f"/share/aether-engine/frontend/{asset}")
+            )
+            assert archive.read(asset_path) == (root / "frontend" / asset).read_bytes()
         metadata = Parser().parsestr(archive.read(metadata_path).decode("utf-8"))
         assert metadata["License-Expression"] == "MIT"
         assert metadata.get_all("License-File") == ["LICENSE"]

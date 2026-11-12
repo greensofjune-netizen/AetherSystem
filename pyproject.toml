@@ -25,7 +25,7 @@ galileo = "aether_engine.galileo_desktop:main"
 matrix-aristotle = "aether_engine.aristotle_desktop:main"
 
 [project.optional-dependencies]
-dev = ["build>=1.2.2", "httpx>=0.28.1", "mypy>=2.4.1", "numpy>=2.4.6", "pandas>=3.1.1", "pandas-stubs>=3.1.0.261029", "pytest>=9.2.0", "ruff>=0.17.4", "skyfield>=1.55", "types-ephem>=4.2.0.20260724"]
+dev = ["build>=1.2.2", "httpx>=0.28.1", "mypy>=2.4.1", "numpy>=2.4.6", "pandas>=3.1.1", "pandas-stubs>=3.1.0.261029", "playwright>=1.65.0", "pytest>=9.2.0", "ruff>=0.17.4", "skyfield>=1.55", "types-ephem>=4.2.0.20260724"]
 build = ["pyinstaller>=6.22.3"]
 local-ai = ["llama-cpp-python>=0.3.36"]
 api = ["ephem>=4.2.1", "fastapi>=0.162.4", "pandas>=3.1.1", "pydantic>=2.14.3", "skyfield>=1.55", "uvicorn>=0.54.0"]
@@ -55,7 +55,7 @@ include = ["aether_engine*", "automator"]
 aether_engine = ["galileo_assets/*", "galileo_voice.swift"]
 
 [tool.setuptools.data-files]
-"share/aether-engine/frontend" = ["frontend/aether_client.js"]
+"share/aether-engine/frontend" = ["frontend/aether_client.js", "frontend/index.html", "frontend/monitor_tasks.js"]
 "share/aether-engine/protocol" = [
     "aether_protocol.schema.json",
     "include/aether_bridge.h",

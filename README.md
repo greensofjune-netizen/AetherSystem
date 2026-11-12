@@ -403,11 +403,24 @@ Task reads and writes still succeed. It waits for the real `Retry-After`
 without restarting or mocking the clock, then verifies a new dispatch,
 live SSE delivery, replay and exact stored records. This adds approximately
 one minute to the suite; it is not a throughput or denial-of-service benchmark.
+The same suite now launches headless Chromium for the `/monitor` task panel.
+It creates a task through the real form and checks API persistence, stops the
+temporary backend, verifies visible read/save errors and a retained draft,
+then restarts on the same address. The open page must reconnect without
+duplicate tasks or automatic save retries; an explicit subsequent save and
+page reload must show exactly the persisted tasks. It also checks server-side
+validation feedback. These checks cover Chromium, not native desktop UI or
+every browser.
 It runs in CI too. Run it alone with
 `python -m pytest -q tests/test_backend_readiness.py`.
 Existing Quick Actions invoke the linked source files, so they pick up this
 test without reinstalling; frozen desktop apps must be rebuilt to show the
-updated confirmation text. The action does not run Node.js/Playwright tests,
+updated confirmation text. Install the dev extra and run
+`python -m playwright install chromium` once with the interpreter used by the
+installed Quick Action (which may differ from your activated environment).
+Linux development hosts may need `python -m playwright install --with-deps chromium`.
+The action fails rather than silently skipping missing browser prerequisites.
+It does not run the independent Quantum Lab's Node.js/Playwright suite,
 validate model-answer quality, or install dependencies.
 
 The backup action uses
@@ -434,12 +447,13 @@ before deleting anything.
 python3 -m venv .venv
 source .venv/bin/activate
 python -m pip install -e ".[dev,api,secure-vault,spin-network-visualization]"
+python -m playwright install chromium
 python -m pytest
 ```
 
 On Windows, activate with `.venv\Scripts\activate` instead.
 
-The editable install exposes the `aether-engine` command from this checkout. The development, API, secure-vault, and spin-network-visualization extras install the dependencies needed by the full test suite. After code changes, rerun `python -m pytest`; to verify the installed command, run `aether-engine --help`.
+The editable install exposes the `aether-engine` command from this checkout. The development, API, secure-vault, and spin-network-visualization extras install the Python dependencies needed by the full test suite. Playwright's Chromium install above is a separate one-time browser prerequisite; on Linux use `python -m playwright install --with-deps chromium` when system browser libraries are missing. After code changes, rerun `python -m pytest`; to verify the installed command, run `aether-engine --help`.
 
 To refresh every optional dependency group in an existing environment, run:
 
@@ -501,6 +515,18 @@ The optional `aether_engine.ai_bridge.AetherLunaBridge` runs in offline simulati
 `aether_engine.ai_bridge.LocalAirGappedEngine` defaults to the official Qwen2.5-Coder-1.5B Q4_K_M GGUF at `models/qwen2.5-coder-1.5b-instruct-q4_k_m.gguf`. Download the weights from [Qwen's official Hugging Face repository](https://huggingface.co/Qwen/Qwen2.5-Coder-1.5B-Instruct-GGUF) if they are not already present; the approximately 1.1 GB GGUF files are excluded from Git. Install the optional backend with `python -m pip install -e ".[local-ai]"`, or set `AETHER_MODEL_PATH` to an alternate GGUF file. The engine loads the model on first inference and makes no network requests; vision inference is not supported by this text model.
 
 The local REST API is available with `python -m pip install -e ".[api]"`. Run the full API with `uvicorn app:app --reload` during development or `aether-server` for the packaged entry point. Both listen on `127.0.0.1:8000` by default. Loopback clients are trusted; non-loopback clients must send a matching `X-Aether-Token` header. Set a high-entropy `AETHER_API_TOKEN` in the server environment before binding Uvicorn to a network interface. An unset token denies remote requests. Set `AETHER_DATABASE_PATH` to select the SQLite database; otherwise the API uses the nearest project `.aether-engine.sqlite3`. Interactive OpenAPI docs are at `/docs`. The shared script is available at `/aether_client.js`; serving it does not automatically load it into a page or implement the dashboard and Copernicus endpoints it references.
+
+Open `http://127.0.0.1:8000/monitor` for the main API's task panel.
+It lists and creates real tasks in the API's selected database, refreshes every
+five seconds, and reconnects when the backend returns at the same address.
+**Add task writes real data**; choose a temporary `AETHER_DATABASE_PATH` for
+testing. The panel requires JavaScript and same-origin loopback access; it does
+not embed a remote API token. Visible errors preserve drafts and mark the last
+task list as potentially stale. A failed save is never retried automatically:
+if an acknowledgement is lost, refresh and check the list before submitting
+again. The API does not provide idempotency keys. Other legacy telemetry and
+snapshot controls on this monitor still require their optional dashboard
+routes; serving the page does not implement those routes or connect desktop chat.
 
 ### Local Workspace record bridge
 

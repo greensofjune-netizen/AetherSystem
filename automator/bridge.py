@@ -182,8 +182,9 @@ def run(
             "backend readiness (task persistence, dispatch, SSE reconnect/restart, "
             "clean shutdown, backup recovery, damaged-backup rejection, "
             "failure containment, concurrent writes/restart, crash recovery, "
-            "cursor recovery, and rate-limit recovery)? "
-            "Includes a real 60-second rate window. No model server is required.",
+            "cursor recovery, rate-limit recovery, and browser task recovery)? "
+            "Requires Playwright and its Chromium browser, and includes a real "
+            "60-second rate window. No model server is required.",
             confirm=True,
         )
         interpreter = (

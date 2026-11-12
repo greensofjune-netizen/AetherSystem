@@ -12,6 +12,31 @@ from starlette.requests import Request
 from aether_engine import server
 
 
+def test_monitor_assets_source_installed_and_missing(tmp_path, monkeypatch):
+    for route, source_name, installed_name, content_type in (
+        ("/monitor", "SOURCE_MONITOR_PATH", "INSTALLED_MONITOR_PATH", "text/html"),
+        (
+            "/monitor_tasks.js", "SOURCE_TASKS_PATH", "INSTALLED_TASKS_PATH",
+            "application/javascript",
+        ),
+    ):
+        source = getattr(server, source_name)
+        expected = source.read_bytes()
+        response = _request("GET", route)
+        assert response.status_code == 200
+        assert response.content == expected
+        assert response.headers["content-type"].startswith(content_type)
+        installed = tmp_path / source.name
+        installed.write_bytes(expected)
+        monkeypatch.setattr(server, source_name, tmp_path / "missing-source")
+        monkeypatch.setattr(server, installed_name, installed)
+        response = _request("GET", route)
+        assert response.status_code == 200
+        assert response.content == expected
+        monkeypatch.setattr(server, installed_name, tmp_path / "missing-installed")
+        assert _request("GET", route).status_code == 404
+
+
 def test_propulsion_reference_api(tmp_path, monkeypatch):
     from aether_engine.propulsion_matrix import (
         KineticPropulsionArchive,

@@ -172,6 +172,10 @@ SOURCE_CLIENT_PATH = Path(__file__).resolve().parents[2] / "frontend" / "aether_
 INSTALLED_CLIENT_PATH = (
     Path(sys.prefix) / "share" / "aether-engine" / "frontend" / "aether_client.js"
 )
+SOURCE_MONITOR_PATH = SOURCE_CLIENT_PATH.with_name("index.html")
+INSTALLED_MONITOR_PATH = INSTALLED_CLIENT_PATH.with_name("index.html")
+SOURCE_TASKS_PATH = SOURCE_CLIENT_PATH.with_name("monitor_tasks.js")
+INSTALLED_TASKS_PATH = INSTALLED_CLIENT_PATH.with_name("monitor_tasks.js")
 
 
 class StrictRequest(BaseModel):
@@ -445,6 +449,22 @@ def serve_shared_javascript() -> FileResponse:
         if path.is_file():
             return FileResponse(path, media_type="application/javascript")
     raise HTTPException(status_code=404, detail="Shared JS file not found.")
+
+
+@app.get("/monitor", include_in_schema=False)
+def serve_monitor() -> FileResponse:
+    for path in (SOURCE_MONITOR_PATH, INSTALLED_MONITOR_PATH):
+        if path.is_file():
+            return FileResponse(path, media_type="text/html")
+    raise HTTPException(status_code=404, detail="Monitor page not found.")
+
+
+@app.get("/monitor_tasks.js", include_in_schema=False)
+def serve_monitor_tasks() -> FileResponse:
+    for path in (SOURCE_TASKS_PATH, INSTALLED_TASKS_PATH):
+        if path.is_file():
+            return FileResponse(path, media_type="application/javascript")
+    raise HTTPException(status_code=404, detail="Monitor task script not found.")
 
 
 @app.post("/v1/chat/completions", response_model=ChatCompletionResponse)

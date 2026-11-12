@@ -41,6 +41,8 @@ jobs:
         run: clang -std=c11 -Wall -Wextra -Werror -dynamiclib -fPIC src/aether_bridge.c -o /tmp/libaether.dylib
       - name: Install Python dependencies
         run: python -m pip install -e ".[dev,api,ollama,secure-vault,spin-network-visualization]"
+      - name: Install Chromium for monitor readiness
+        run: python -m playwright install --with-deps chromium
       - name: Lint Python
         run: ruff check .
       - name: Type-check Python
