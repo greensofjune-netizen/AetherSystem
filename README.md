@@ -427,6 +427,11 @@ PATCH requests, preserved status/identity and durable edits after restart.
 Edit drafts survive refreshes and outages independently of the creation draft.
 A lost acknowledgement after a real committed edit must refresh saved details
 without retrying or discarding the edit draft.
+Conflict drills race independent HTTP clients over each editable field: exactly
+one same-field write succeeds, the other returns 409 without a partial update;
+unrelated-field edits both succeed. Two open Chromium pages prove retained drafts,
+explicit conflict review, rejection of changes made after review, restart recovery
+and a successful subsequent save.
 These checks cover Chromium, not native desktop UI or
 every browser.
 It runs in CI too. Run it alone with
@@ -548,9 +553,15 @@ Each row displays its description, priority and due date. **Edit task** opens a
 separate editor for title, description, priority and due date; an empty date removes
 the due date. Save or cancel before editing a different task. Polling, filtering
 and reconnection update the list but never replace the open edit draft.
-**Save changes** sends only fields changed from the displayed snapshot; it does
-not overwrite unrelated fields. There is no conflict detection: another client's
-changes to the same fields can be overwritten. After an uncertain save, compare
+**Save changes** sends only fields changed from the displayed snapshot, with their
+original values. SQLite atomically rejects the whole edit with HTTP 409 if any
+of those fields now differs; unrelated-field edits can coexist. A conflict keeps
+your draft and shows the latest returned values, even if the task left your search.
+Cancel to discard the draft, or choose **Keep draft against reviewed values** to
+adopt that comparison baseline without writing. Your changed draft fields remain;
+unchanged fields adopt reviewed values. **Save changes** then explicitly submits
+against that baseline, and another intervening change is rejected again.
+After an uncertain save, compare
 the refreshed row before retrying or canceling; the edit may already be stored.
 Cancel editing discards the edit draft without writing. Reload discards all drafts.
 **Add task, Save changes, Complete and Reopen write real data**; choose a temporary `AETHER_DATABASE_PATH` for
@@ -566,6 +577,29 @@ if an acknowledgement is lost, refresh and check the list before submitting
 again. The API does not provide idempotency keys. Other legacy telemetry and
 snapshot controls on this monitor still require their optional dashboard
 routes; serving the page does not implement those routes or connect desktop chat.
+
+#### Guarded task edits for API clients
+
+`PATCH /api/v1/tasks/{id}` accepts optional `expected_values`, an object containing
+exactly the fields being updated, using their original stored strings (`null` is
+allowed only for `due_date`). For `clear_due_date: true`, include `due_date` in
+the expected values. Example:
+
+```json
+{"title": "Revised title", "expected_values": {"title": "Original title"}}
+```
+
+Success returns the saved task. A mismatch returns HTTP 409 with
+`detail.code: "task_edit_conflict"`, `detail.fields`, `detail.message` and
+`detail.current` (the current task); nothing in that edit is written, including
+`updated_at`. Invalid or incomplete guards return 422; missing tasks return 404.
+Comparison and update are one SQLite statement, not a read-then-write check.
+This is value-based conflict detection, not a revision log: a field changed and
+then restored to its original value does not conflict. Legacy API/CLI callers
+omitting `expected_values` retain unguarded behavior; the monitor always sends
+guards for nonempty edits. Complete/Reopen retain their existing semantics.
+The `v0.2.0` Git tag marks the preceding verified monitor/recovery checkpoint;
+it is not a package upload or deployment.
 
 ### Local Workspace record bridge
 
@@ -1098,3 +1132,4 @@ aether-engine --database ./data/project.sqlite3 task list
 ```
 
 Restore validates the full versioned backup before writing. It refuses to modify a non-empty database unless `--replace` is provided; replacement is transactional, so invalid data does not partially replace existing records.
+# automatic-octo-goggles
