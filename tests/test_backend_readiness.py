@@ -289,6 +289,127 @@ def test_monitor_task_creation_restart_and_outage_recovery(tmp_path: Path) -> No
         page.close()
 
 
+def test_monitor_task_status_lifecycle_and_outage_recovery(tmp_path: Path) -> None:
+    from playwright.sync_api import expect, sync_playwright
+
+    with sync_playwright() as playwright, playwright.chromium.launch() as browser:
+        page = browser.new_page()
+        updates = []
+        page.on(
+            "request",
+            lambda request: updates.append(request.url)
+            if request.method == "POST"
+            and request.url.endswith(("/complete", "/reopen")) else None,
+        )
+        with running_backend(tmp_path) as client:
+            port = client.base_url.port
+            assert port is not None
+            page.goto(f"{client.base_url}/monitor")
+            page.get_by_label("Task title (required)").fill("Lifecycle task")
+            page.get_by_role("button", name="Add task", exact=True).click()
+            expect(page.locator("#task-list li")).to_have_count(1)
+            exported = client.get("/api/v1/export")
+            assert exported.status_code == 200, exported.text
+            original = exported.json()["tasks"][0]
+            task_id = original["id"]
+            row = page.locator(f'[data-task-id="{task_id}"]')
+            complete = page.get_by_role("button", name=f"Complete task #{task_id}", exact=True)
+            complete.focus()
+            complete.press("Enter")
+            expect(row).to_contain_text(" - done")
+            expect(page.locator("#task-notice")).to_have_text(f"Task #{task_id} completed.")
+            expect(page.get_by_role("button", name=f"Reopen task #{task_id}", exact=True)).to_be_focused()
+            exported = client.get("/api/v1/export")
+            assert exported.status_code == 200, exported.text
+            completed = exported.json()["tasks"]
+            assert len(completed) == 1
+            assert completed[0] == {**original, "status": "done", "updated_at": completed[0]["updated_at"]}
+            page.reload()
+            expect(row).to_contain_text(" - done")
+
+        with running_backend(tmp_path, port=port) as client:
+            page.get_by_role("button", name="Refresh tasks", exact=True).click()
+            expect(page.locator("#task-connection")).to_contain_text("connected.")
+            expect(row).to_contain_text(" - done")
+            exported = client.get("/api/v1/export")
+            assert exported.status_code == 200, exported.text
+            assert exported.json()["tasks"] == completed
+            page.get_by_role("button", name=f"Reopen task #{task_id}", exact=True).click()
+            expect(row).to_contain_text(" - pending")
+            expect(page.locator("#task-notice")).to_have_text(f"Task #{task_id} reopened.")
+            exported = client.get("/api/v1/export")
+            assert exported.status_code == 200, exported.text
+            reopened = exported.json()["tasks"]
+            assert len(reopened) == 1
+            assert reopened[0] == {**original, "updated_at": reopened[0]["updated_at"]}
+            page.reload()
+            expect(row).to_contain_text(" - pending")
+
+        page.get_by_role("button", name=f"Complete task #{task_id}", exact=True).click()
+        expect(page.get_by_role("alert")).to_contain_text("Update not confirmed")
+        expect(page.locator("#task-connection")).to_contain_text("unavailable", timeout=10000)
+        expect(row).to_contain_text(" - pending")
+        expect(page.locator("#task-list li")).to_have_count(1)
+        expect(page.locator("#task-notice")).to_be_empty()
+        assert len(updates) == 3
+
+        with running_backend(tmp_path, port=port) as client:
+            expect(page.locator("#task-connection")).to_contain_text("connected.", timeout=15000)
+            expect(row).to_contain_text(" - pending")
+            exported = client.get("/api/v1/export")
+            assert exported.status_code == 200, exported.text
+            assert exported.json()["tasks"] == reopened
+            assert len(updates) == 3, "Failed updates must not be retried automatically"
+            page.get_by_role("button", name=f"Complete task #{task_id}", exact=True).click()
+            expect(row).to_contain_text(" - done")
+            expect(page.get_by_role("alert")).to_be_empty()
+            assert len(updates) == 4
+            exported = client.get("/api/v1/export")
+            assert exported.status_code == 200, exported.text
+            final = exported.json()["tasks"]
+            assert len(final) == 1
+            assert final[0] == {**completed[0], "updated_at": final[0]["updated_at"]}
+
+        with running_backend(tmp_path, port=port) as client:
+            page.reload()
+            expect(row).to_contain_text(" - done")
+            page.get_by_role("button", name=f"Reopen task #{task_id}", exact=True).click()
+            expect(row).to_contain_text(" - pending")
+            exported = client.get("/api/v1/export")
+            assert exported.status_code == 200, exported.text
+            final = exported.json()["tasks"]
+            assert len(final) == 1
+            assert final[0] == {**original, "updated_at": final[0]["updated_at"]}
+        with running_backend(tmp_path, port=port) as client:
+            page.reload()
+            expect(row).to_contain_text(" - pending")
+            expect(page.locator("#task-list li")).to_have_count(1)
+            exported = client.get("/api/v1/export")
+            assert exported.status_code == 200, exported.text
+            assert exported.json()["tasks"] == final
+            # Commit the real update, but drop its response to simulate a lost
+            # acknowledgement. The UI must reconcile, not repeat the write.
+            def drop_acknowledgement(route):
+                response = route.fetch()
+                assert response.status == 200
+                route.abort("connectionfailed")
+
+            page.route(f"**/api/v1/tasks/{task_id}/complete", drop_acknowledgement, times=1)
+            page.get_by_role("button", name=f"Complete task #{task_id}", exact=True).click()
+            expect(page.get_by_role("alert")).to_contain_text("Update not confirmed")
+            expect(row).to_contain_text(" - done")
+            expect(page.locator("#task-notice")).to_be_empty()
+            assert len(updates) == 6
+            exported = client.get("/api/v1/export")
+            assert exported.status_code == 200, exported.text
+            reconciled = exported.json()["tasks"]
+            assert len(reconciled) == 1
+            assert reconciled[0] == {
+                **completed[0], "updated_at": reconciled[0]["updated_at"]
+            }
+        page.close()
+
+
 def test_dispatch_rate_limit_preserves_data_and_recovers(tmp_path: Path) -> None:
     envelope = {
         "protocol_version": "1.0.0",

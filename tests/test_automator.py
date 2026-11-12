@@ -123,6 +123,7 @@ def test_project_tests_confirm_and_report_readiness_results(
         assert "rate-limit recovery" in dialogs[0][0]
         assert "60-second rate window" in dialogs[0][0]
         assert "browser task recovery" in dialogs[0][0]
+        assert "complete/reopen" in dialogs[0][0]
         assert "Playwright" in dialogs[0][0]
         assert command == [str(Path(sys.executable)), "-m", "pytest", "-q"]
         assert kwargs["cwd"] == tmp_path

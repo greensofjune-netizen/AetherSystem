@@ -183,6 +183,7 @@ def run(
             "clean shutdown, backup recovery, damaged-backup rejection, "
             "failure containment, concurrent writes/restart, crash recovery, "
             "cursor recovery, rate-limit recovery, and browser task recovery)? "
+            "Browser checks include complete/reopen and status outage recovery. "
             "Requires Playwright and its Chromium browser, and includes a real "
             "60-second rate window. No model server is required.",
             confirm=True,

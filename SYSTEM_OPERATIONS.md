@@ -279,7 +279,16 @@ visible outage errors and draft retention, and restarts on the same address.
 The still-open page must reconnect without duplicate tasks or automatic write
 retries; an explicit subsequent save and reload must match stored records.
 Server-side validation feedback is also checked. Source and installed monitor
-assets and wheel contents have separate coverage. These are Chromium checks,
+assets and wheel contents have separate coverage. The status lifecycle journey
+uses the existing complete/reopen API routes through native buttons, including
+keyboard activation and restored focus. Both statuses must persist after page
+reload and backend restart with unchanged task IDs and no duplicates. During
+an outage, a failed update leaves displayed records intact and shows an explicit
+uncertain-outcome error; reconnecting reloads backend status without retrying
+the mutation. Writes are serialized and never applied optimistically.
+An intercepted lost acknowledgement after a real committed update separately
+verifies reconciliation to the saved status without a repeated POST.
+These are Chromium checks,
 not native desktop or cross-browser certification.
 No live model or real project database is used. The independent lab's Node.js/
 browser suite and native UI checks remain separate.

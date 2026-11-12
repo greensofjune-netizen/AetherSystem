@@ -11,8 +11,8 @@
     let loading = null;
     let saving = false;
 
-    async function requestTasks(options = {}) {
-        const response = await fetch('/api/v1/tasks', {
+    async function requestTasks(options = {}, path = '/api/v1/tasks') {
+        const response = await fetch(path, {
             ...options,
             cache: 'no-store',
             signal: AbortSignal.timeout(5000),
@@ -26,14 +26,52 @@
     }
 
     function renderTasks(tasks) {
+        const focusedId = document.activeElement.closest?.('[data-task-id]')?.dataset.taskId;
         const rows = tasks.map((task) => {
             const row = document.createElement('li');
             row.dataset.taskId = String(task.id);
             row.textContent = `#${task.id} ${task.title} - ${task.status}`;
+            const action = document.createElement('button');
+            action.type = 'button';
+            const operation = task.status === 'done' ? 'reopen' : 'complete';
+            action.textContent = `${operation === 'complete' ? 'Complete' : 'Reopen'} task #${task.id}`;
+            action.disabled = saving;
+            action.addEventListener('click', () => updateStatus(task.id, operation));
+            row.append(action);
             return row;
         });
         list.replaceChildren(...rows);
+        if (focusedId) list.querySelector(`[data-task-id="${focusedId}"] button`)?.focus();
         connection.textContent = `Task backend connected. ${tasks.length} task(s).`;
+    }
+
+    function setSaving(value) {
+        saving = value;
+        fields.disabled = value;
+        list.querySelectorAll('button').forEach((button) => { button.disabled = value; });
+    }
+
+    async function updateStatus(taskId, operation) {
+        if (saving) return;
+        const restoreFocus = list.contains(document.activeElement);
+        setSaving(true);
+        notice.textContent = '';
+        error.textContent = '';
+        try {
+            if (loading) await loading;
+            const task = await requestTasks(
+                { method: 'POST' }, `/api/v1/tasks/${taskId}/${operation}`
+            );
+            notice.textContent = `Task #${task.id} ${task.status === 'done' ? 'completed' : 'reopened'}.`;
+        } catch (failure) {
+            error.textContent = `Update not confirmed: ${failure.message} Displayed status may be stale. Refresh tasks before retrying; the update may have been saved.`;
+        } finally {
+            setSaving(false);
+        }
+        await loadTasks();
+        if (restoreFocus && (document.activeElement === document.body || list.contains(document.activeElement))) {
+            list.querySelector(`[data-task-id="${taskId}"] button`)?.focus();
+        }
     }
 
     function loadTasks() {
@@ -53,8 +91,7 @@
     form.addEventListener('submit', async (event) => {
         event.preventDefault();
         if (saving) return;
-        saving = true;
-        fields.disabled = true;
+        setSaving(true);
         save.textContent = 'Saving...';
         notice.textContent = '';
         error.textContent = '';
@@ -72,8 +109,7 @@
         } catch (failure) {
             error.textContent = `Save not confirmed: ${failure.message} Your draft is retained. Refresh tasks before retrying; the request may have been saved.`;
         } finally {
-            saving = false;
-            fields.disabled = false;
+            setSaving(false);
             save.textContent = 'Add task';
         }
         await loadTasks();

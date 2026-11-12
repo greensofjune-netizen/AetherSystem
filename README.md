@@ -409,7 +409,14 @@ temporary backend, verifies visible read/save errors and a retained draft,
 then restarts on the same address. The open page must reconnect without
 duplicate tasks or automatic save retries; an explicit subsequent save and
 page reload must show exactly the persisted tasks. It also checks server-side
-validation feedback. These checks cover Chromium, not native desktop UI or
+validation feedback. A separate lifecycle journey completes and reopens tasks
+through their buttons, checks keyboard activation/focus, and verifies both
+statuses after reload and backend restart. An update attempted during a real
+outage must show an error without changing the displayed status; reconnecting
+reconciles from the backend without retrying the update or duplicating tasks.
+It also drops one response after a real committed update to verify that an
+uncertain acknowledgement reconciles to the saved status without another POST.
+These checks cover Chromium, not native desktop UI or
 every browser.
 It runs in CI too. Run it alone with
 `python -m pytest -q tests/test_backend_readiness.py`.
@@ -517,12 +524,15 @@ The optional `aether_engine.ai_bridge.AetherLunaBridge` runs in offline simulati
 The local REST API is available with `python -m pip install -e ".[api]"`. Run the full API with `uvicorn app:app --reload` during development or `aether-server` for the packaged entry point. Both listen on `127.0.0.1:8000` by default. Loopback clients are trusted; non-loopback clients must send a matching `X-Aether-Token` header. Set a high-entropy `AETHER_API_TOKEN` in the server environment before binding Uvicorn to a network interface. An unset token denies remote requests. Set `AETHER_DATABASE_PATH` to select the SQLite database; otherwise the API uses the nearest project `.aether-engine.sqlite3`. Interactive OpenAPI docs are at `/docs`. The shared script is available at `/aether_client.js`; serving it does not automatically load it into a page or implement the dashboard and Copernicus endpoints it references.
 
 Open `http://127.0.0.1:8000/monitor` for the main API's task panel.
-It lists and creates real tasks in the API's selected database, refreshes every
+It lists, creates, completes and reopens real tasks in the API's selected database, refreshes every
 five seconds, and reconnects when the backend returns at the same address.
-**Add task writes real data**; choose a temporary `AETHER_DATABASE_PATH` for
+**Add task, Complete and Reopen write real data**; choose a temporary `AETHER_DATABASE_PATH` for
 testing. The panel requires JavaScript and same-origin loopback access; it does
 not embed a remote API token. Visible errors preserve drafts and mark the last
-task list as potentially stale. A failed save is never retried automatically:
+task list as potentially stale. Status is not changed optimistically; the
+panel reloads the backend records after an update and restores keyboard focus
+to that task's action. Writes are serialized while a request is pending.
+A failed save or status update is never retried automatically:
 if an acknowledgement is lost, refresh and check the list before submitting
 again. The API does not provide idempotency keys. Other legacy telemetry and
 snapshot controls on this monitor still require their optional dashboard
