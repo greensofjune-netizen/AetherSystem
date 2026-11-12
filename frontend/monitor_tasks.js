@@ -17,6 +17,8 @@
     const editDescription = document.getElementById('task-edit-description');
     const editDue = document.getElementById('task-edit-due');
     const editSave = document.getElementById('task-edit-save');
+    const conflictPanel = document.getElementById('task-edit-conflict');
+    let conflict = null;
     let loading = null;
     let saving = false;
     let editing = null;
@@ -31,6 +33,11 @@
         });
         const result = await response.json();
         if (!response.ok) {
+            if (response.status === 409 && result.detail?.code === 'task_edit_conflict') {
+                const failure = new Error(result.detail.message);
+                failure.conflict = result.detail;
+                throw failure;
+            }
             throw new Error(typeof result.detail === 'string'
                 ? result.detail : `Task request failed (HTTP ${response.status}).`);
         }
@@ -92,6 +99,8 @@
     function openEditor(task) {
         if (saving || editing) return;
         editing = task;
+        conflict = null;
+        conflictPanel.hidden = true;
         editTitle.value = task.title;
         editDescription.value = task.description;
         editDue.value = task.due_date || '';
@@ -105,6 +114,8 @@
     function closeEditor() {
         const taskId = editing.id;
         editing = null;
+        conflict = null;
+        conflictPanel.hidden = true;
         editor.hidden = true;
         editor.reset();
         setSaving(false);
@@ -118,6 +129,24 @@
     document.getElementById('task-edit-cancel').addEventListener('click', () => {
         if (saving || !editing) return;
         focusEdit(closeEditor());
+    });
+
+    document.getElementById('task-conflict-review').addEventListener('click', () => {
+        if (saving || !editing || !conflict) return;
+        const latest = conflict.current;
+        if (editTitle.value === editing.title) editTitle.value = latest.title;
+        if (editDescription.value === editing.description) editDescription.value = latest.description;
+        if (editDue.value === (editing.due_date || '')) editDue.value = latest.due_date || '';
+        const priority = editor.querySelector('input[name="priority"]:checked');
+        if (priority.value === editing.priority) {
+            editor.querySelector(`input[name="priority"][value="${latest.priority}"]`).checked = true;
+        }
+        editing = latest;
+        conflict = null;
+        conflictPanel.hidden = true;
+        error.textContent = '';
+        notice.textContent = 'Reviewed values adopted as the baseline. Your changed draft fields are retained; Save changes to submit them.';
+        editTitle.focus();
     });
 
     editor.addEventListener('submit', async (event) => {
@@ -142,6 +171,12 @@
             notice.textContent = 'No changes to save.';
             return;
         }
+        changes.expected_values = Object.fromEntries(
+            Object.keys(changes).map((key) => {
+                const field = key === 'clear_due_date' ? 'due_date' : key;
+                return [field, editing[field]];
+            })
+        );
         setSaving(true);
         editSave.textContent = 'Saving changes...';
         let savedId = null;
@@ -155,7 +190,22 @@
             notice.textContent = `Saved changes to task #${task.id}.`;
             savedId = closeEditor();
         } catch (failure) {
-            error.textContent = `Edit not confirmed: ${failure.message} Your edit draft is retained. Compare the refreshed list before retrying; the edit may have been saved.`;
+            if (failure.conflict) {
+                conflict = failure.conflict;
+                document.getElementById('task-conflict-values').textContent = JSON.stringify({
+                    conflicting_fields: conflict.fields,
+                    latest: {
+                        title: conflict.current.title,
+                        description: conflict.current.description,
+                        priority: conflict.current.priority,
+                        due_date: conflict.current.due_date,
+                    },
+                }, null, 2);
+                conflictPanel.hidden = false;
+                error.textContent = `Edit conflict: ${failure.message}. Nothing from this edit was saved. Your draft is retained; review the conflicting values before saving again.`;
+            } else {
+                error.textContent = `Edit not confirmed: ${failure.message} Your edit draft is retained. Compare the refreshed list before retrying; the edit may have been saved.`;
+            }
         } finally {
             setSaving(false);
             editSave.textContent = 'Save changes';

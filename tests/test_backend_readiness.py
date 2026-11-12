@@ -410,6 +410,215 @@ def test_monitor_task_status_lifecycle_and_outage_recovery(tmp_path: Path) -> No
         page.close()
 
 
+@pytest.mark.parametrize("field,original_value,first_value,second_value", [
+    ("title", "Concurrent task", "First title", "Second title"),
+    ("description", "", "First description", "Second description"),
+    ("priority", "normal", "low", "high"),
+    ("due_date", None, "2027-01-02", "2027-03-04"),
+])
+def test_concurrent_field_edits_have_one_winner(
+    tmp_path: Path, field: str, original_value: str | None,
+    first_value: str, second_value: str,
+) -> None:
+    with running_backend(tmp_path) as client:
+        created = client.post("/api/v1/tasks", json={"title": "Concurrent task"})
+        assert created.status_code == 201, created.text
+        original = created.json()
+        path = f"/api/v1/tasks/{original['id']}"
+        baseline = client.get("/api/v1/export").json()
+        barrier = Barrier(2)
+
+        def edit(value: str) -> httpx.Response:
+            with httpx.Client(base_url=str(client.base_url), trust_env=False) as independent:
+                barrier.wait(timeout=10)
+                return independent.patch(path, json={
+                    field: value, "expected_values": {field: original_value},
+                })
+
+        with ThreadPoolExecutor(max_workers=2) as executor:
+            results = list(executor.map(edit, (first_value, second_value)))
+        assert sorted(result.status_code for result in results) == [200, 409]
+        winner = next(result.json() for result in results if result.status_code == 200)
+        loser = next(result.json()["detail"] for result in results if result.status_code == 409)
+        assert loser == {
+            "code": "task_edit_conflict",
+            "message": f"Task fields changed since editing began: {field}",
+            "fields": [field], "current": winner,
+        }
+        assert winner == {
+            **original, field: winner[field], "updated_at": winner["updated_at"],
+        }
+        assert winner[field] in (first_value, second_value)
+        assert client.get("/api/v1/tasks").json() == [winner]
+        # A stale multi-field edit must reject the entire write.
+        other = "description" if field != "description" else "title"
+        rejected = client.patch(path, json={
+            field: second_value, other: "Must not partially save",
+            "expected_values": {field: original_value, other: original[other]},
+        })
+        assert rejected.status_code == 409, rejected.text
+        assert client.get("/api/v1/tasks").json() == [winner]
+        assert client.get("/api/v1/export").json()["events"] == baseline["events"]
+        missing = client.patch("/api/v1/tasks/999999", json={
+            field: first_value, "expected_values": {field: original_value},
+        })
+        assert missing.status_code == 404, missing.text
+    with running_backend(tmp_path) as client:
+        assert client.get("/api/v1/tasks").json() == [winner]
+        # Explicit review of the winner permits a subsequent valid edit.
+        reviewed = client.patch(path, json={
+            field: original_value if original_value is not None else "2028-01-01",
+            "expected_values": {field: winner[field]},
+        })
+        assert reviewed.status_code == 200, reviewed.text
+
+
+def test_concurrent_unrelated_fields_merge_and_invalid_guards_fail(tmp_path: Path) -> None:
+    with running_backend(tmp_path) as client:
+        created = client.post("/api/v1/tasks", json={"title": "Unrelated task"})
+        assert created.status_code == 201, created.text
+        original = created.json()
+        path = f"/api/v1/tasks/{original['id']}"
+        barrier = Barrier(2)
+
+        def edit(field: str) -> httpx.Response:
+            with httpx.Client(base_url=str(client.base_url), trust_env=False) as independent:
+                barrier.wait(timeout=10)
+                return independent.patch(path, json={
+                    field: f"Edited {field}", "expected_values": {field: original[field]},
+                })
+
+        with ThreadPoolExecutor(max_workers=2) as executor:
+            results = list(executor.map(edit, ("title", "description")))
+        assert [result.status_code for result in results] == [200, 200]
+        merged = client.get("/api/v1/tasks").json()[0]
+        assert merged == {
+            **original, "title": "Edited title", "description": "Edited description",
+            "updated_at": merged["updated_at"],
+        }
+        for expected, status in (
+            ({}, 422),
+            ({"priority": "normal"}, 422),
+            ({"title": None}, 422),
+            ({"title": 12}, 422),
+            ({"title": merged["title"], "status": "pending"}, 422),
+            ({"title": merged["title"], "description": merged["description"]}, 422),
+        ):
+            rejected = client.patch(path, json={
+                "title": "Invalid guard must not write", "expected_values": expected,
+            })
+            assert rejected.status_code == status, rejected.text
+            assert client.get("/api/v1/tasks").json() == [merged]
+        # Legacy clients retain unguarded behavior.
+        legacy = client.patch(path, json={"priority": "high"})
+        assert legacy.status_code == 200, legacy.text
+        dated = client.patch(path, json={
+            "due_date": "2027-01-02", "expected_values": {"due_date": None},
+        })
+        assert dated.status_code == 200, dated.text
+        rejected = client.patch(path, json={
+            "clear_due_date": True, "expected_values": {"due_date": None},
+        })
+        assert rejected.status_code == 409, rejected.text
+        assert client.get("/api/v1/tasks").json() == [dated.json()]
+        cleared = client.patch(path, json={
+            "clear_due_date": True, "expected_values": {"due_date": "2027-01-02"},
+        })
+        assert cleared.status_code == 200, cleared.text
+        assert cleared.json()["due_date"] is None
+
+
+def test_monitor_two_editors_conflict_review_and_recovery(tmp_path: Path) -> None:
+    from playwright.sync_api import expect, sync_playwright
+
+    with sync_playwright() as playwright, playwright.chromium.launch() as browser:
+        first = browser.new_page()
+        second = browser.new_page()
+        writes = []
+        second.on("request", lambda request: writes.append(request.post_data_json)
+                  if request.method == "PATCH" else None)
+        with running_backend(tmp_path) as client:
+            port = client.base_url.port
+            assert port is not None
+            created = client.post("/api/v1/tasks", json={"title": "Shared original"})
+            assert created.status_code == 201, created.text
+            original = created.json()
+            task_id = original["id"]
+            path = f"/api/v1/tasks/{task_id}"
+            for page in (first, second):
+                page.goto(f"{client.base_url}/monitor")
+                page.get_by_role("button", name=f"Edit task #{task_id}", exact=True).click()
+            first.get_by_label("Edit title (required)", exact=True).fill("First editor wins")
+            second.get_by_label("Edit title (required)", exact=True).fill("Second editor draft")
+            second.get_by_label("Edit description", exact=True).fill("Independent local draft")
+            second.get_by_label("Task title (required)", exact=True).fill("Creation retained")
+            search = second.get_by_label("Search tasks", exact=True)
+            search.fill("Shared original")
+            search.press("Enter")
+            first.get_by_role("button", name="Save changes", exact=True).click()
+            expect(first.locator("#task-editor")).to_be_hidden()
+            winner = client.get("/api/v1/tasks").json()[0]
+            assert winner["title"] == "First editor wins"
+            second.get_by_role("button", name="Save changes", exact=True).click()
+            expect(second.get_by_role("alert")).to_contain_text("Edit conflict:")
+            expect(second.get_by_role("alert")).to_contain_text("Nothing from this edit was saved")
+            expect(second.locator("#task-edit-conflict")).to_be_visible()
+            expect(second.locator("#task-conflict-values")).to_contain_text("First editor wins")
+            expect(second.get_by_label("Edit title (required)", exact=True)).to_have_value("Second editor draft")
+            expect(second.get_by_label("Edit description", exact=True)).to_have_value("Independent local draft")
+            expect(second.locator("#task-empty")).to_be_visible()
+            assert client.get("/api/v1/tasks").json() == [winner]
+            assert len(writes) == 1
+            # Repeated Save without explicit review remains a conflict.
+            second.get_by_role("button", name="Save changes", exact=True).click()
+            expect(second.get_by_role("alert")).to_contain_text("Edit conflict:")
+            assert len(writes) == 2
+            assert client.get("/api/v1/tasks").json() == [winner]
+        expect(second.locator("#task-connection")).to_contain_text("unavailable", timeout=15000)
+        expect(second.locator("#task-edit-conflict")).to_be_visible()
+        with running_backend(tmp_path, port=port) as client:
+            expect(second.locator("#task-connection")).to_contain_text("connected.", timeout=15000)
+            assert len(writes) == 2, "Restart/reconnect must not retry a conflict"
+            expect(second.get_by_label("Task title (required)", exact=True)).to_have_value("Creation retained")
+            expect(search).to_have_value("Shared original")
+            review = second.get_by_role("button", name="Keep draft against reviewed values", exact=True)
+            review.click()
+            expect(second.get_by_label("Edit title (required)", exact=True)).to_be_focused()
+            expect(second.locator("#task-edit-conflict")).to_be_hidden()
+            assert len(writes) == 2, "Review must not write"
+            # A change after review must still be rejected atomically.
+            external = client.patch(path, json={"title": "Changed after review", "priority": "high"})
+            assert external.status_code == 200, external.text
+            second.get_by_role("button", name="Save changes", exact=True).click()
+            expect(second.get_by_role("alert")).to_contain_text("Edit conflict:")
+            expect(second.locator("#task-conflict-values")).to_contain_text("Changed after review")
+            assert client.get("/api/v1/tasks").json() == [external.json()]
+            review.click()
+            expect(second.get_by_role("radio", name="High", exact=True)).to_be_checked()
+            expect(second.get_by_label("Edit title (required)", exact=True)).to_have_value("Second editor draft")
+            second.get_by_role("button", name="Save changes", exact=True).click()
+            expect(second.locator("#task-editor")).to_be_hidden()
+            expect(second.get_by_role("alert")).to_be_empty()
+            expect(second.get_by_role("button", name="Refresh tasks", exact=True)).to_be_focused()
+            assert len(writes) == 4
+            assert writes[-1] == {
+                "title": "Second editor draft", "description": "Independent local draft",
+                "expected_values": {"title": "Changed after review", "description": ""},
+            }
+            final = client.get("/api/v1/tasks").json()[0]
+            assert final == {
+                **original, "title": "Second editor draft", "description": "Independent local draft",
+                "priority": "high", "updated_at": final["updated_at"],
+            }
+        with running_backend(tmp_path, port=port) as client:
+            second.reload()
+            expect(second.locator("#task-list")).to_contain_text("Second editor draft")
+            assert client.get("/api/v1/tasks").json() == [final]
+            assert len(writes) == 4
+        first.close()
+        second.close()
+
+
 def test_monitor_task_details_editing_and_restart(tmp_path: Path) -> None:
     from playwright.sync_api import expect, sync_playwright
 
@@ -513,10 +722,15 @@ def test_monitor_task_details_editing_and_restart(tmp_path: Path) -> None:
             assert patches[-1] == {
                 "title": "Edited task", "description": "Edited description\nSecond line",
                 "priority": "high", "due_date": "2027-03-04",
+                "expected_values": {
+                    key: original[key] for key in ("title", "description", "priority", "due_date")
+                },
             }
             updated = client.get("/api/v1/tasks").json()[0]
             assert updated == {
-                **original, **patches[-1], "updated_at": updated["updated_at"],
+                **original,
+                **{key: value for key, value in patches[-1].items() if key != "expected_values"},
+                "updated_at": updated["updated_at"],
             }
             expect(creation).to_have_value("Independent creation draft")
             page.reload()
@@ -536,7 +750,12 @@ def test_monitor_task_details_editing_and_restart(tmp_path: Path) -> None:
             expect(editor).to_be_hidden()
             expect(row).to_contain_text("No description.")
             expect(row).to_contain_text("Priority: normal. Due date: None.")
-            assert patches[-1] == {"description": "", "clear_due_date": True}
+            assert patches[-1] == {
+                "description": "", "clear_due_date": True,
+                "expected_values": {
+                    "description": updated["description"], "due_date": updated["due_date"],
+                },
+            }
             cleared = client.get("/api/v1/tasks").json()[0]
             assert cleared == {
                 **updated, "description": "", "due_date": None, "priority": "normal",
@@ -645,6 +864,16 @@ def test_monitor_edit_draft_outage_and_lost_acknowledgement(tmp_path: Path) -> N
             expect(description).to_have_value("Saved despite missing acknowledgement")
             assert len(patches) == 3
             assert client.get("/api/v1/tasks").json() == [saved]
+            # Retrying a committed but unacknowledged edit must not overwrite
+            # newer values or change its timestamp.
+            page.get_by_role("button", name="Save changes", exact=True).click()
+            expect(page.get_by_role("alert")).to_contain_text("Edit conflict:")
+            assert len(patches) == 4
+            assert client.get("/api/v1/tasks").json() == [saved]
+            page.get_by_role("button", name="Keep draft against reviewed values", exact=True).click()
+            page.get_by_role("button", name="Save changes", exact=True).click()
+            expect(page.locator("#task-notice")).to_have_text("No changes to save.")
+            assert len(patches) == 4
             page.get_by_role("button", name="Cancel editing", exact=True).click()
             page.reload()
             expect(row).to_contain_text(saved["description"])

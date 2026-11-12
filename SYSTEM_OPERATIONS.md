@@ -308,9 +308,23 @@ must preserve that search and move focus to Refresh tasks.
 The separate edit draft must survive list refreshes, filtering and real outages
 alongside the creation draft. After an intercepted lost acknowledgement from a
 committed PATCH, the refreshed list must show saved details while retaining the
-edit draft, with no automatic retry or duplicate record. The API has no edit
-conflict detection: changed fields use last-writer-wins semantics. Cancel editing
+edit draft, with no automatic retry or duplicate record. Cancel editing
 discards only the edit draft; no-op Save changes sends no request.
+Guarded edits supply `expected_values` for exactly the changed fields (including
+`due_date` when clearing it). A single SQLite conditional UPDATE compares stored
+values and writes atomically. A mismatch returns 409 `task_edit_conflict` with
+the current task and conflicting fields, changing no records or timestamps.
+Missing tasks remain 404 and invalid guards are 422. Independent-client races
+over title, description, priority and nullable due date must produce exactly one
+200 and one 409; unrelated-field races must both succeed. No partial multi-field
+write is allowed, and winners must survive restart.
+Two open browser pages must retain creation/edit drafts and applied search on
+conflict, expose latest values as text, and require explicit baseline review
+before overwriting a conflict. Review itself never writes; later intervening
+changes must conflict again. Reconnection never retries rejected edits.
+This is field-value comparison, not historical revision tracking: a value changed
+and restored to the original is accepted. Legacy callers without guards retain
+unguarded behavior; Complete/Reopen are unchanged. The monitor guards every edit.
 These are Chromium checks,
 not native desktop or cross-browser certification.
 No live model or real project database is used. The independent lab's Node.js/

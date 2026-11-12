@@ -4,6 +4,7 @@ import logging
 import os
 import sqlite3
 import subprocess
+from collections.abc import Mapping
 from contextlib import contextmanager
 from dataclasses import dataclass
 from datetime import date, datetime, timezone
@@ -105,6 +106,13 @@ class Task:
     due_date: str | None
     created_at: str
     updated_at: str
+
+
+class TaskConflictError(Exception):
+    def __init__(self, current: Task, fields: list[str]) -> None:
+        self.current = current
+        self.fields = fields
+        super().__init__("Task fields changed since editing began: " + ", ".join(fields))
 
 
 @dataclass(frozen=True)
@@ -396,6 +404,7 @@ class AetherStore:
         priority: str | None = None,
         due_date: str | None = None,
         clear_due_date: bool = False,
+        expected_values: Mapping[str, str | None] | None = None,
     ) -> Task | None:
         if not any(
             value is not None for value in (title, description, priority, due_date)
@@ -429,17 +438,38 @@ class AetherStore:
         if due_date is not None or clear_due_date:
             updates.append(("due_date", due_date))
 
+        if expected_values is not None:
+            if set(expected_values) != {column for column, _ in updates}:
+                raise ValueError("Expected values must cover exactly the updated fields.")
+            if any(
+                not isinstance(value, str) and not (key == "due_date" and value is None)
+                for key, value in expected_values.items()
+            ):
+                raise ValueError("Expected values must be strings, or null for due_date.")
+
         now = datetime.now(timezone.utc).isoformat()
         assignments = ", ".join(f"{column} = ?" for column, _ in updates)
         values = [value for _, value in updates]
+        conditions = ""
+        expected: list[str | None] = []
+        if expected_values is not None:
+            conditions = "".join(f" AND {column} IS ?" for column in expected_values)
+            expected = list(expected_values.values())
         with self._connect() as connection:
-            connection.execute(
-                f"UPDATE tasks SET {assignments}, updated_at = ? WHERE id = ?",
-                (*values, now, task_id),
+            # Compare and write in the same statement so concurrent writers cannot
+            # both pass a separate read/check before changing the same field.
+            result = connection.execute(
+                f"UPDATE tasks SET {assignments}, updated_at = ? WHERE id = ?{conditions}",
+                (*values, now, task_id, *expected),
             )
             row = connection.execute(
                 "SELECT * FROM tasks WHERE id = ?", (task_id,)
             ).fetchone()
+            if row is not None and result.rowcount == 0 and expected_values is not None:
+                raise TaskConflictError(
+                    Task(**dict(row)),
+                    [key for key, value in expected_values.items() if row[key] != value],
+                )
         return Task(**dict(row)) if row is not None else None
 
     def dashboard_snapshot(

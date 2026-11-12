@@ -30,7 +30,7 @@ from .ai_bridge import LocalAirGappedEngine
 from .astrology import NatalChartRequest, calculate_natal_chart
 from .astronomy_engine import get_astronomy_engine
 from .backups import DEFAULT_BACKUP_RETENTION, write_backup
-from .database import AetherStore, Event
+from .database import AetherStore, Event, TaskConflictError
 from .engine_core import EngineOrchestrator
 from .engine_doctor import AetherEngineDoctor
 from .engine_runtime import EngineConfig, EngineNotReadyError, EngineRuntime
@@ -218,6 +218,7 @@ class TaskUpdate(StrictRequest):
     priority: TaskPriority | None = None
     due_date: str | None = None
     clear_due_date: bool = False
+    expected_values: dict[str, str | None] | None = Field(default=None, max_length=4)
 
 
 class RestoreRequest(StrictRequest):
@@ -607,7 +608,15 @@ def update_task(task_id: int, request: TaskUpdate) -> dict[str, Any]:
             priority=request.priority,
             due_date=request.due_date,
             clear_due_date=request.clear_due_date,
+            expected_values=request.expected_values,
         )
+    except TaskConflictError as error:
+        raise HTTPException(status_code=409, detail={
+            "code": "task_edit_conflict",
+            "message": str(error),
+            "fields": error.fields,
+            "current": asdict(error.current),
+        }) from error
     except ValueError as error:
         _raise_bad_request(error)
     if task is None:

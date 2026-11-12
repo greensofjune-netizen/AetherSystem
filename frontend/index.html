@@ -80,7 +80,7 @@
                 <legend id="task-edit-heading">Edit task</legend>
                 <p id="task-edit-help">Editing a snapshot of the displayed task. Refreshes update the list, not this draft.
                     Save or cancel before editing another task.
-                    Only changed fields are saved. Another client's changes to those same fields can be overwritten.
+                    Only changed fields are saved. If those fields changed elsewhere, the save is rejected without writing.
                     After an uncertain save, compare the refreshed list before retrying.
                     Cancel editing discards this edit draft; reload discards all unsaved drafts.</p>
                 <label for="task-edit-title">Edit title (required)</label>
@@ -98,6 +98,15 @@
                 <label for="task-edit-due">Edit due date (optional)</label>
                 <input id="task-edit-due" name="due_date" type="date">
                 <p>Leave the date empty to remove an existing due date.</p>
+                <section id="task-edit-conflict" aria-labelledby="task-conflict-heading" hidden>
+                    <h4 id="task-conflict-heading">Review conflicting changes</h4>
+                    <p>Your draft is retained. These are the latest values returned with the conflict;
+                        they may change again. Cancel to discard your draft, or explicitly keep it against
+                        these reviewed values, then Save changes to overwrite conflicting fields.
+                        Unchanged draft fields will adopt the reviewed values. Nothing is saved by reviewing.</p>
+                    <pre id="task-conflict-values"></pre>
+                    <button type="button" id="task-conflict-review">Keep draft against reviewed values</button>
+                </section>
                 <button type="submit" id="task-edit-save">Save changes</button>
                 <button type="button" class="secondary" id="task-edit-cancel">Cancel editing</button>
             </fieldset>
