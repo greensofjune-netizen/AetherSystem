@@ -30,6 +30,9 @@ account, or optional dependencies. By default, data is stored in
 `pyproject.toml`; outside a project, it is stored in the current directory.
 Use `aether-engine --help` to explore commands.
 
+For the system schematic, component boundaries, operation sequences, and
+verification checklist, see [System operations](./SYSTEM_OPERATIONS.md).
+
 Try the [fictional community-garden demo](./examples/demo/README.md) in its own
 database without importing or sharing your real project history.
 

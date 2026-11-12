@@ -60,6 +60,14 @@ class FakeLaunchctl:
         return subprocess.CompletedProcess(command, 0, "", "")
 
 
+@pytest.fixture
+def launchd_platform(monkeypatch) -> None:
+    from aether_engine import scheduler
+
+    monkeypatch.setattr(scheduler.sys, "platform", "darwin")
+
+
+@pytest.mark.usefixtures("launchd_platform")
 def test_install_status_and_uninstall_launch_agent(tmp_path: Path) -> None:
     home = tmp_path / "home"
     database = tmp_path / "project" / ".aether-engine.sqlite3"
@@ -119,6 +127,7 @@ def test_install_status_and_uninstall_launch_agent(tmp_path: Path) -> None:
     assert not runner.loaded
 
 
+@pytest.mark.usefixtures("launchd_platform")
 def test_install_refuses_to_overwrite_unrelated_agent(tmp_path: Path) -> None:
     home = tmp_path / "home"
     database = tmp_path / "project" / ".aether-engine.sqlite3"
@@ -137,6 +146,7 @@ def test_install_refuses_to_overwrite_unrelated_agent(tmp_path: Path) -> None:
     assert agent_path.read_bytes() == original
 
 
+@pytest.mark.usefixtures("launchd_platform")
 def test_uninstall_reports_absent_schedule(tmp_path: Path) -> None:
     agent_path, removed = uninstall_backup_schedule(
         tmp_path / "project" / "data.sqlite3",
@@ -147,6 +157,7 @@ def test_uninstall_reports_absent_schedule(tmp_path: Path) -> None:
     assert not agent_path.exists()
 
 
+@pytest.mark.usefixtures("launchd_platform")
 def test_status_surfaces_launchctl_failures(tmp_path: Path) -> None:
     class FailedPrint(FakeLaunchctl):
         def __call__(self, command: list[str], **kwargs) -> subprocess.CompletedProcess[str]:
@@ -165,6 +176,7 @@ def test_status_surfaces_launchctl_failures(tmp_path: Path) -> None:
     assert agent_path.exists()
 
 
+@pytest.mark.usefixtures("launchd_platform")
 def test_install_bootstrap_failure_removes_new_plist(tmp_path: Path) -> None:
     class FailedBootstrap(FakeLaunchctl):
         def __call__(self, command: list[str], **kwargs) -> subprocess.CompletedProcess[str]:

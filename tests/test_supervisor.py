@@ -44,7 +44,7 @@ def test_core_validates_state_vectors_and_active_tags() -> None:
 
 def test_configure_logging_adds_file_and_stream_handlers(tmp_path) -> None:
     logger = logging.getLogger("aether_engine.supervisor")
-    for handler in logger.handlers:
+    for handler in logger.handlers[:]:
         logger.removeHandler(handler)
         handler.close()
 
@@ -57,14 +57,15 @@ def test_configure_logging_adds_file_and_stream_handlers(tmp_path) -> None:
     if os.name != "nt":
         assert log_path.stat().st_mode & 0o777 == 0o600
 
-    for handler in logger.handlers:
+    for handler in logger.handlers[:]:
         logger.removeHandler(handler)
         handler.close()
+    assert not logger.handlers
 
 
 def test_configure_logging_refuses_symlink_destination(tmp_path) -> None:
     logger = logging.getLogger("aether_engine.supervisor")
-    for handler in logger.handlers:
+    for handler in logger.handlers[:]:
         logger.removeHandler(handler)
         handler.close()
 

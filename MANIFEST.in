@@ -1,5 +1,6 @@
 include LICENSE
 include THIRD_PARTY_NOTICES.md
+include SYSTEM_OPERATIONS.md
 include *.py
 include .gitignore
 include requirements.txt
