@@ -4,8 +4,12 @@ on:
   push:
   pull_request:
 
+permissions:
+  contents: read
+
 jobs:
   quality:
+    timeout-minutes: 30
     strategy:
       fail-fast: false
       matrix:
@@ -13,26 +17,39 @@ jobs:
         python-version: ["3.11", "3.14"]
     runs-on: ${{ matrix.os }}
     steps:
-      - uses: actions/checkout@v7.0.1
-      - uses: actions/setup-python@v7.1.0
+      - name: Check out source
+        uses: actions/checkout@v7.0.1
+      - name: Set up Python
+        uses: actions/setup-python@v7.1.0
         with:
           python-version: ${{ matrix.python-version }}
-      - uses: actions/setup-node@v4
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
         with:
           node-version: "24"
-      - if: runner.os == 'Linux'
+      - name: Install Linux SSH test prerequisites
+        if: runner.os == 'Linux'
         run: |
           sudo apt-get update
           sudo apt-get install -y openssh-server
           sudo mkdir -p /run/sshd
-      - if: runner.os == 'Linux'
+      - name: Compile C bridge on Linux
+        if: runner.os == 'Linux'
         run: cc -std=c11 -Wall -Wextra -Werror -shared -fPIC src/aether_bridge.c -o /tmp/libaether.so
-      - if: runner.os == 'macOS'
+      - name: Compile C bridge on macOS
+        if: runner.os == 'macOS'
         run: clang -std=c11 -Wall -Wextra -Werror -dynamiclib -fPIC src/aether_bridge.c -o /tmp/libaether.dylib
-      - run: python -m pip install -e ".[dev,api,ollama,secure-vault,spin-network-visualization]"
-      - run: ruff check .
-      - run: mypy
-      - run: npm exec --yes --package=typescript@5.9.3 -- tsc --noEmit --strict --target ES2020 --module NodeNext --moduleResolution NodeNext --allowImportingTsExtensions tests/test_validation_types.ts
-      - run: node --test tests/test_validation_frontend.mjs
-      - run: node tests/test_validation_types.ts
-      - run: python -m pytest
+      - name: Install Python dependencies
+        run: python -m pip install -e ".[dev,api,ollama,secure-vault,spin-network-visualization]"
+      - name: Lint Python
+        run: ruff check .
+      - name: Type-check Python
+        run: mypy
+      - name: Type-check validation contract
+        run: npm exec --yes --package=typescript@5.9.3 -- tsc --noEmit --strict --target ES2020 --module NodeNext --moduleResolution NodeNext --allowImportingTsExtensions tests/test_validation_types.ts
+      - name: Test frontend validation
+        run: node --test tests/test_validation_frontend.mjs
+      - name: Test TypeScript validation
+        run: node tests/test_validation_types.ts
+      - name: Run Python test suite
+        run: python -m pytest
