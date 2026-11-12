@@ -298,6 +298,19 @@ previous query must never render under a newly applied view. Completing/reopenin
 a task that leaves the view moves keyboard focus to Refresh tasks; creating a
 task resets only its creation form. Reload intentionally resets filters/drafts;
 no browser persistence is promised.
+Details/editing journeys exercise the existing PATCH route for title, description,
+priority and due date, including description/date clearing, required-field and
+backend validation, no-op/cancel behavior and keyboard focus. Only changed fields
+are submitted, preserving a different client's change to an untouched field.
+Task ID, creation time and status must remain unchanged, and edited records must
+survive reload and backend restart. Editing a title out of the active search
+must preserve that search and move focus to Refresh tasks.
+The separate edit draft must survive list refreshes, filtering and real outages
+alongside the creation draft. After an intercepted lost acknowledgement from a
+committed PATCH, the refreshed list must show saved details while retaining the
+edit draft, with no automatic retry or duplicate record. The API has no edit
+conflict detection: changed fields use last-writer-wins semantics. Cancel editing
+discards only the edit draft; no-op Save changes sends no request.
 These are Chromium checks,
 not native desktop or cross-browser certification.
 No live model or real project database is used. The independent lab's Node.js/

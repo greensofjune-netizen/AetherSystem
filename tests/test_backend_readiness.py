@@ -410,6 +410,248 @@ def test_monitor_task_status_lifecycle_and_outage_recovery(tmp_path: Path) -> No
         page.close()
 
 
+def test_monitor_task_details_editing_and_restart(tmp_path: Path) -> None:
+    from playwright.sync_api import expect, sync_playwright
+
+    with sync_playwright() as playwright, playwright.chromium.launch() as browser:
+        page = browser.new_page(viewport={"width": 390, "height": 844})
+        patches = []
+        errors = []
+        page.on("pageerror", lambda error: errors.append(str(error)))
+        page.on(
+            "request",
+            lambda request: patches.append(request.post_data_json)
+            if request.method == "PATCH" else None,
+        )
+        with running_backend(tmp_path) as client:
+            port = client.base_url.port
+            assert port is not None
+            response = client.post("/api/v1/tasks", json={
+                "title": "Editable task", "description": "Original description",
+                "priority": "low", "due_date": "2027-01-02",
+            })
+            assert response.status_code == 201, response.text
+            task_id = response.json()["id"]
+            response = client.post(f"/api/v1/tasks/{task_id}/complete")
+            assert response.status_code == 200, response.text
+            original = response.json()
+            page.goto(f"{client.base_url}/monitor")
+            row = page.locator(f'[data-task-id="{task_id}"]')
+            expect(row).to_contain_text("Original description")
+            expect(row).to_contain_text("Priority: low. Due date: 2027-01-02.")
+            creation = page.get_by_label("Task title (required)", exact=True)
+            creation.fill("Independent creation draft")
+            editor = page.locator("#task-editor")
+            title = page.get_by_label("Edit title (required)", exact=True)
+            description = page.get_by_label("Edit description", exact=True)
+            due = page.get_by_label("Edit due date (optional)", exact=True)
+            edit = page.get_by_role("button", name=f"Edit task #{task_id}", exact=True)
+            edit.focus()
+            edit.press("Enter")
+            expect(title).to_be_focused()
+            expect(title).to_have_value(original["title"])
+            expect(description).to_have_value(original["description"])
+            expect(due).to_have_value(original["due_date"])
+            page.get_by_role("button", name="Save changes", exact=True).click()
+            expect(page.locator("#task-notice")).to_have_text("No changes to save.")
+            assert patches == []
+            title.fill("Discarded edit")
+            page.get_by_role("button", name="Cancel editing", exact=True).click()
+            expect(editor).to_be_hidden()
+            expect(edit).to_be_focused()
+            assert patches == []
+            edit.click()
+            expect(title).to_have_value("Editable task")
+            title.fill("")
+            page.get_by_role("button", name="Save changes", exact=True).click()
+            expect(title).to_be_focused()
+            assert patches == [], "Native required validation must prevent submission"
+            title.fill("   ")
+            page.get_by_role("button", name="Save changes", exact=True).click()
+            expect(page.get_by_role("alert")).to_contain_text("Edit not confirmed")
+            expect(title).to_have_value("   ")
+            expect(row).to_contain_text("Editable task - done")
+            assert client.get("/api/v1/tasks").json() == [original]
+            title.fill("Edited task")
+            description.fill("Edited description\nSecond line")
+            page.get_by_role("radio", name="High", exact=True).check()
+            due.fill("2027-03-04")
+            with page.expect_response(
+                lambda response: response.url.endswith("/api/v1/tasks")
+                and response.request.method == "GET"
+            ):
+                page.get_by_role("button", name="Refresh tasks", exact=True).click()
+            expect(title).to_have_value("Edited task")
+            expect(description).to_have_value("Edited description\nSecond line")
+            expect(creation).to_have_value("Independent creation draft")
+            held = []
+
+            def hold_acknowledgement(route):
+                result = route.fetch()
+                assert result.status == 200
+                held.append((route, result))
+
+            page.route(f"**/api/v1/tasks/{task_id}", hold_acknowledgement, times=1)
+            page.get_by_role("button", name="Save changes", exact=True).click()
+            expect(page.locator("#task-edit-save")).to_be_disabled()
+            expect(page.get_by_role("button", name="Cancel editing", exact=True)).to_be_disabled()
+            expect(page.get_by_role("button", name="Add task", exact=True)).to_be_disabled()
+            expect(page.get_by_role("button", name="Apply filters", exact=True)).to_be_disabled()
+            expect(page.get_by_role("button", name=f"Reopen task #{task_id}", exact=True)).to_be_disabled()
+            expect(row).to_contain_text("Editable task - done")
+            expect(row).to_contain_text("Original description")
+            editor.evaluate("(form) => form.requestSubmit()")
+            assert len(patches) == 2, "A pending edit must block duplicate submissions"
+            assert len(held) == 1
+            held[0][0].fulfill(response=held[0][1])
+            expect(editor).to_be_hidden()
+            expect(row).to_contain_text("Edited task - done")
+            expect(row).to_contain_text("Edited description\nSecond line")
+            expect(row).to_contain_text("Priority: high. Due date: 2027-03-04.")
+            expect(edit).to_be_focused()
+            expect(page.get_by_role("alert")).to_be_empty()
+            assert patches[-1] == {
+                "title": "Edited task", "description": "Edited description\nSecond line",
+                "priority": "high", "due_date": "2027-03-04",
+            }
+            updated = client.get("/api/v1/tasks").json()[0]
+            assert updated == {
+                **original, **patches[-1], "updated_at": updated["updated_at"],
+            }
+            expect(creation).to_have_value("Independent creation draft")
+            page.reload()
+            expect(row).to_contain_text("Priority: high. Due date: 2027-03-04.")
+
+        with running_backend(tmp_path, port=port) as client:
+            page.get_by_role("button", name="Refresh tasks", exact=True).click()
+            expect(page.locator("#task-connection")).to_contain_text("connected.")
+            assert client.get("/api/v1/tasks").json() == [updated]
+            edit.click()
+            description.fill("")
+            due.fill("")
+            # A different client's change to an untouched field must survive.
+            external = client.patch(f"/api/v1/tasks/{task_id}", json={"priority": "normal"})
+            assert external.status_code == 200, external.text
+            page.get_by_role("button", name="Save changes", exact=True).click()
+            expect(editor).to_be_hidden()
+            expect(row).to_contain_text("No description.")
+            expect(row).to_contain_text("Priority: normal. Due date: None.")
+            assert patches[-1] == {"description": "", "clear_due_date": True}
+            cleared = client.get("/api/v1/tasks").json()[0]
+            assert cleared == {
+                **updated, "description": "", "due_date": None, "priority": "normal",
+                "updated_at": cleared["updated_at"],
+            }
+            # An edit can remove the task from the active search without losing focus.
+            search = page.get_by_label("Search tasks", exact=True)
+            search.fill("Edited task")
+            search.press("Enter")
+            expect(row).to_be_visible()
+            edit.click()
+            title.fill("Renamed outside search")
+            page.get_by_role("button", name="Save changes", exact=True).click()
+            expect(editor).to_be_hidden()
+            expect(row).to_have_count(0)
+            expect(page.locator("#task-empty")).to_be_visible()
+            expect(page.get_by_role("button", name="Refresh tasks", exact=True)).to_be_focused()
+            expect(search).to_have_value("Edited task")
+            final = client.get("/api/v1/tasks").json()[0]
+            assert final == {
+                **cleared, "title": "Renamed outside search", "updated_at": final["updated_at"],
+            }
+        with running_backend(tmp_path, port=port) as client:
+            page.reload()
+            expect(row).to_contain_text("Renamed outside search - done")
+            expect(row).to_contain_text("Priority: normal. Due date: None.")
+            assert client.get("/api/v1/tasks").json() == [final]
+            assert len(patches) == 4
+            assert errors == []
+        page.close()
+
+
+def test_monitor_edit_draft_outage_and_lost_acknowledgement(tmp_path: Path) -> None:
+    from playwright.sync_api import expect, sync_playwright
+
+    with sync_playwright() as playwright, playwright.chromium.launch() as browser:
+        page = browser.new_page()
+        patches = []
+        page.on(
+            "request", lambda request: patches.append(request.post_data_json)
+            if request.method == "PATCH" else None,
+        )
+        with running_backend(tmp_path) as client:
+            port = client.base_url.port
+            assert port is not None
+            response = client.post("/api/v1/tasks", json={"title": "Outage edit task"})
+            assert response.status_code == 201, response.text
+            original = response.json()
+            task_id = original["id"]
+            page.goto(f"{client.base_url}/monitor")
+            row = page.locator(f'[data-task-id="{task_id}"]')
+            page.get_by_role("button", name=f"Edit task #{task_id}", exact=True).click()
+            title = page.get_by_label("Edit title (required)", exact=True)
+            title.fill("Retained edit draft")
+            creation = page.get_by_label("Task title (required)", exact=True)
+            creation.fill("Retained creation draft")
+            search = page.get_by_label("Search tasks", exact=True)
+            search.fill("edit")
+            search.press("Enter")
+            expect(row).to_be_visible()
+        page.get_by_role("button", name="Save changes", exact=True).click()
+        expect(page.get_by_role("alert")).to_contain_text("Edit not confirmed")
+        expect(page.locator("#task-connection")).to_contain_text("unavailable", timeout=10000)
+        expect(row).to_contain_text("Outage edit task - pending")
+        expect(title).to_have_value("Retained edit draft")
+        expect(creation).to_have_value("Retained creation draft")
+        expect(search).to_have_value("edit")
+        assert len(patches) == 1
+        with running_backend(tmp_path, port=port) as client:
+            expect(page.locator("#task-connection")).to_contain_text("connected.", timeout=15000)
+            expect(title).to_have_value("Retained edit draft")
+            expect(creation).to_have_value("Retained creation draft")
+            assert client.get("/api/v1/tasks").json() == [original]
+            assert len(patches) == 1, "Reconnection must not retry edits"
+            page.get_by_role("button", name="Save changes", exact=True).click()
+            expect(page.locator("#task-editor")).to_be_hidden()
+            expect(row).to_contain_text("Retained edit draft - pending")
+            expect(page.get_by_role("alert")).to_be_empty()
+            assert len(patches) == 2
+            page.get_by_role("button", name=f"Edit task #{task_id}", exact=True).click()
+            description = page.get_by_label("Edit description", exact=True)
+            description.fill("Saved despite missing acknowledgement")
+
+            def drop_acknowledgement(route):
+                result = route.fetch()
+                assert result.status == 200
+                route.abort("connectionfailed")
+
+            page.route(f"**/api/v1/tasks/{task_id}", drop_acknowledgement, times=1)
+            page.get_by_role("button", name="Save changes", exact=True).click()
+            expect(page.get_by_role("alert")).to_contain_text("Edit not confirmed")
+            expect(row).to_contain_text("Saved despite missing acknowledgement")
+            expect(description).to_have_value("Saved despite missing acknowledgement")
+            expect(page.locator("#task-editor")).to_be_visible()
+            expect(creation).to_have_value("Retained creation draft")
+            assert len(patches) == 3
+            saved = client.get("/api/v1/tasks").json()[0]
+            assert saved == {
+                **original, "title": "Retained edit draft",
+                "description": "Saved despite missing acknowledgement",
+                "updated_at": saved["updated_at"],
+            }
+        expect(page.locator("#task-connection")).to_contain_text("unavailable", timeout=10000)
+        with running_backend(tmp_path, port=port) as client:
+            expect(page.locator("#task-connection")).to_contain_text("connected.", timeout=15000)
+            expect(description).to_have_value("Saved despite missing acknowledgement")
+            assert len(patches) == 3
+            assert client.get("/api/v1/tasks").json() == [saved]
+            page.get_by_role("button", name="Cancel editing", exact=True).click()
+            page.reload()
+            expect(row).to_contain_text(saved["description"])
+            expect(page.locator("#task-editor")).to_be_hidden()
+        page.close()
+
+
 def test_monitor_filters_search_drafts_and_outage_recovery(tmp_path: Path) -> None:
     from playwright.sync_api import expect, sync_playwright
 

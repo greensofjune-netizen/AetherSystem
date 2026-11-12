@@ -185,6 +185,7 @@ def run(
             "cursor recovery, rate-limit recovery, and browser task recovery)? "
             "Browser checks include complete/reopen and status outage recovery. "
             "They also cover filters/search and draft retention. "
+            "Task details/editing checks include validation, restart and uncertain-save recovery. "
             "Requires Playwright and its Chromium browser, and includes a real "
             "60-second rate window. No model server is required.",
             confirm=True,

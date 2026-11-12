@@ -21,7 +21,9 @@
         pre { background: #0a0e14; padding: 12px; border-radius: 6px; overflow-x: auto; font-size: 0.85rem; border: 1px solid #1a2635; max-height: 180px; }
         #task-panel { margin-block-end: 20px; }
         #task-panel label { display: block; margin-block: 12px 4px; }
-        #task-panel input { box-sizing: border-box; width: 100%; padding: 12px; min-height: 48px; font: inherit; background: #0a0e14; color: #e1e7f0; border: 1px solid #8fa0b5; border-radius: 4px; }
+        #task-panel input, #task-panel textarea { box-sizing: border-box; width: 100%; padding: 12px; min-height: 48px; font: inherit; background: #0a0e14; color: #e1e7f0; border: 1px solid #8fa0b5; border-radius: 4px; }
+        #task-panel textarea { resize: vertical; }
+        #task-panel .task-description { white-space: pre-wrap; overflow-wrap: anywhere; }
         #task-panel input[type="radio"] { width: auto; min-height: auto; margin-inline-end: 8px; accent-color: #4fc1ff; }
         #task-panel .task-status-options { display: flex; flex-wrap: wrap; gap: 16px; }
         #task-panel .task-status-options label { display: flex; align-items: center; min-height: 48px; margin: 0; }
@@ -73,6 +75,33 @@
         <button type="button" class="secondary" id="task-refresh">Refresh tasks</button>
         <p id="task-empty" role="status" hidden>No tasks match the applied filters.</p>
         <ul id="task-list" aria-label="Project tasks"></ul>
+        <form id="task-editor" action="/api/v1/tasks" method="post" aria-describedby="task-edit-help" hidden>
+            <fieldset id="task-edit-fields" disabled>
+                <legend id="task-edit-heading">Edit task</legend>
+                <p id="task-edit-help">Editing a snapshot of the displayed task. Refreshes update the list, not this draft.
+                    Save or cancel before editing another task.
+                    Only changed fields are saved. Another client's changes to those same fields can be overwritten.
+                    After an uncertain save, compare the refreshed list before retrying.
+                    Cancel editing discards this edit draft; reload discards all unsaved drafts.</p>
+                <label for="task-edit-title">Edit title (required)</label>
+                <input id="task-edit-title" name="title" required maxlength="500">
+                <label for="task-edit-description">Edit description</label>
+                <textarea id="task-edit-description" name="description" rows="5" maxlength="8000"></textarea>
+                <fieldset>
+                    <legend>Edit priority</legend>
+                    <div class="task-status-options">
+                        <label for="task-priority-low"><input id="task-priority-low" type="radio" name="priority" value="low">Low</label>
+                        <label for="task-priority-normal"><input id="task-priority-normal" type="radio" name="priority" value="normal">Normal</label>
+                        <label for="task-priority-high"><input id="task-priority-high" type="radio" name="priority" value="high">High</label>
+                    </div>
+                </fieldset>
+                <label for="task-edit-due">Edit due date (optional)</label>
+                <input id="task-edit-due" name="due_date" type="date">
+                <p>Leave the date empty to remove an existing due date.</p>
+                <button type="submit" id="task-edit-save">Save changes</button>
+                <button type="button" class="secondary" id="task-edit-cancel">Cancel editing</button>
+            </fieldset>
+        </form>
     </section>
     
     <p>Telemetry and snapshot controls below require optional dashboard routes.

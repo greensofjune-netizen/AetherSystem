@@ -125,6 +125,8 @@ def test_project_tests_confirm_and_report_readiness_results(
         assert "browser task recovery" in dialogs[0][0]
         assert "complete/reopen" in dialogs[0][0]
         assert "filters/search" in dialogs[0][0]
+        assert "details/editing" in dialogs[0][0]
+        assert "uncertain-save recovery" in dialogs[0][0]
         assert "Playwright" in dialogs[0][0]
         assert command == [str(Path(sys.executable)), "-m", "pytest", "-q"]
         assert kwargs["cwd"] == tmp_path

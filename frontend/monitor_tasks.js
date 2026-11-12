@@ -11,8 +11,15 @@
     const filters = document.getElementById('task-filters');
     const filterFields = document.getElementById('task-filter-fields');
     const empty = document.getElementById('task-empty');
+    const editor = document.getElementById('task-editor');
+    const editFields = document.getElementById('task-edit-fields');
+    const editTitle = document.getElementById('task-edit-title');
+    const editDescription = document.getElementById('task-edit-description');
+    const editDue = document.getElementById('task-edit-due');
+    const editSave = document.getElementById('task-edit-save');
     let loading = null;
     let saving = false;
+    let editing = null;
     let viewPath = '/api/v1/tasks';
     let viewLabel = 'All tasks';
 
@@ -31,22 +38,40 @@
     }
 
     function renderTasks(tasks) {
-        const focusedId = document.activeElement.closest?.('[data-task-id]')?.dataset.taskId;
+        const focused = document.activeElement;
+        const focusedId = focused.closest?.('[data-task-id]')?.dataset.taskId;
+        const focusedAction = focused.dataset.taskAction;
         const rows = tasks.map((task) => {
             const row = document.createElement('li');
             row.dataset.taskId = String(task.id);
             row.textContent = `#${task.id} ${task.title} - ${task.status}`;
             const action = document.createElement('button');
             action.type = 'button';
+            action.dataset.taskAction = 'status';
             const operation = task.status === 'done' ? 'reopen' : 'complete';
             action.textContent = `${operation === 'complete' ? 'Complete' : 'Reopen'} task #${task.id}`;
             action.disabled = saving;
             action.addEventListener('click', () => updateStatus(task.id, operation));
             row.append(action);
+            const description = document.createElement('p');
+            description.className = 'task-description';
+            description.textContent = task.description || 'No description.';
+            const metadata = document.createElement('p');
+            metadata.textContent = `Priority: ${task.priority}. Due date: ${task.due_date || 'None'}.`;
+            const edit = document.createElement('button');
+            edit.type = 'button';
+            edit.dataset.taskAction = 'edit';
+            edit.textContent = `Edit task #${task.id}`;
+            edit.disabled = saving || editing !== null;
+            edit.setAttribute('aria-controls', 'task-editor');
+            edit.addEventListener('click', () => openEditor(task));
+            row.append(description, metadata, edit);
             return row;
         });
         list.replaceChildren(...rows);
-        if (focusedId) list.querySelector(`[data-task-id="${focusedId}"] button`)?.focus();
+        if (focusedId) {
+            (list.querySelector(`[data-task-id="${focusedId}"] [data-task-action="${focusedAction}"]`) || refresh).focus();
+        }
         empty.textContent = viewPath === '/api/v1/tasks'
             ? 'No tasks yet. Add a task to get started.'
             : 'No tasks match the applied filters.';
@@ -58,8 +83,88 @@
         saving = value;
         fields.disabled = value;
         filterFields.disabled = value;
-        list.querySelectorAll('button').forEach((button) => { button.disabled = value; });
+        editFields.disabled = value || editing === null;
+        list.querySelectorAll('button').forEach((button) => {
+            button.disabled = value || (button.dataset.taskAction === 'edit' && editing !== null);
+        });
     }
+
+    function openEditor(task) {
+        if (saving || editing) return;
+        editing = task;
+        editTitle.value = task.title;
+        editDescription.value = task.description;
+        editDue.value = task.due_date || '';
+        editor.querySelector(`input[name="priority"][value="${task.priority}"]`).checked = true;
+        document.getElementById('task-edit-heading').textContent = `Edit task #${task.id}`;
+        editor.hidden = false;
+        setSaving(false);
+        editTitle.focus();
+    }
+
+    function closeEditor() {
+        const taskId = editing.id;
+        editing = null;
+        editor.hidden = true;
+        editor.reset();
+        setSaving(false);
+        return taskId;
+    }
+
+    function focusEdit(taskId) {
+        (list.querySelector(`[data-task-id="${taskId}"] [data-task-action="edit"]`) || refresh).focus();
+    }
+
+    document.getElementById('task-edit-cancel').addEventListener('click', () => {
+        if (saving || !editing) return;
+        focusEdit(closeEditor());
+    });
+
+    editor.addEventListener('submit', async (event) => {
+        event.preventDefault();
+        if (saving || !editing) return;
+        const changes = {};
+        const values = {
+            title: editTitle.value,
+            description: editDescription.value,
+            priority: editor.querySelector('input[name="priority"]:checked').value,
+        };
+        for (const [key, value] of Object.entries(values)) {
+            if (value !== editing[key]) changes[key] = value;
+        }
+        if (editDue.value !== (editing.due_date || '')) {
+            if (editDue.value) changes.due_date = editDue.value;
+            else changes.clear_due_date = true;
+        }
+        notice.textContent = '';
+        error.textContent = '';
+        if (!Object.keys(changes).length) {
+            notice.textContent = 'No changes to save.';
+            return;
+        }
+        setSaving(true);
+        editSave.textContent = 'Saving changes...';
+        let savedId = null;
+        try {
+            if (loading) await loading;
+            const task = await requestTasks({
+                method: 'PATCH',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(changes),
+            }, `/api/v1/tasks/${editing.id}`);
+            notice.textContent = `Saved changes to task #${task.id}.`;
+            savedId = closeEditor();
+        } catch (failure) {
+            error.textContent = `Edit not confirmed: ${failure.message} Your edit draft is retained. Compare the refreshed list before retrying; the edit may have been saved.`;
+        } finally {
+            setSaving(false);
+            editSave.textContent = 'Save changes';
+        }
+        await loadTasks();
+        if (savedId !== null && (document.activeElement === document.body || editor.contains(document.activeElement))) {
+            focusEdit(savedId);
+        }
+    });
 
     async function updateStatus(taskId, operation) {
         if (saving) return;

@@ -421,6 +421,12 @@ literal wildcard characters and empty results. Applied views and unsaved creatio
 drafts survive refreshes and real outages; failed reads hide successful empty-state
 messages and label preserved rows as stale or from the previous view. Older
 in-flight responses cannot overwrite a newly applied view.
+Details/editing journeys cover all four editable fields, native and backend
+validation, no-op/cancel behavior, clearing descriptions/dates, changed-fields-only
+PATCH requests, preserved status/identity and durable edits after restart.
+Edit drafts survive refreshes and outages independently of the creation draft.
+A lost acknowledgement after a real committed edit must refresh saved details
+without retrying or discarding the edit draft.
 These checks cover Chromium, not native desktop UI or
 every browser.
 It runs in CI too. Run it alone with
@@ -538,7 +544,16 @@ every task. Applied filters persist during refreshes, writes and reconnection
 in the open page; edits to filter controls take effect only when applied.
 The creation draft is separate and is not reset by filtering. Page reload resets
 the view and unsaved drafts; they are not saved to browser storage.
-**Add task, Complete and Reopen write real data**; choose a temporary `AETHER_DATABASE_PATH` for
+Each row displays its description, priority and due date. **Edit task** opens a
+separate editor for title, description, priority and due date; an empty date removes
+the due date. Save or cancel before editing a different task. Polling, filtering
+and reconnection update the list but never replace the open edit draft.
+**Save changes** sends only fields changed from the displayed snapshot; it does
+not overwrite unrelated fields. There is no conflict detection: another client's
+changes to the same fields can be overwritten. After an uncertain save, compare
+the refreshed row before retrying or canceling; the edit may already be stored.
+Cancel editing discards the edit draft without writing. Reload discards all drafts.
+**Add task, Save changes, Complete and Reopen write real data**; choose a temporary `AETHER_DATABASE_PATH` for
 testing. The panel requires JavaScript and same-origin loopback access; it does
 not embed a remote API token. Visible errors preserve drafts and mark the last
 task list as potentially stale. Status is not changed optimistically; the
@@ -546,7 +561,7 @@ panel reloads the backend records after an update and restores keyboard focus
 to that task's action, or Refresh tasks if the task leaves the filtered view.
 Empty results are shown only after a successful read, never as an outage fallback.
 Writes are serialized while a request is pending.
-A failed save or status update is never retried automatically:
+A failed creation, edit or status update is never retried automatically:
 if an acknowledgement is lost, refresh and check the list before submitting
 again. The API does not provide idempotency keys. Other legacy telemetry and
 snapshot controls on this monitor still require their optional dashboard
