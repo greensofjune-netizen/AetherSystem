@@ -210,6 +210,102 @@ def test_backend_readiness_task_dispatch_reconnect_and_restart(tmp_path: Path) -
         assert replay["envelope"] == envelope
 
 
+def test_dispatch_rate_limit_preserves_data_and_recovers(tmp_path: Path) -> None:
+    envelope = {
+        "protocol_version": "1.0.0",
+        "source_lang": "python",
+        "node": "ATLAS",
+        "event": "RATE_RECOVERY_TEST",
+        "timestamp": 1.0,
+        "payload": {},
+    }
+    with running_backend(tmp_path) as client:
+        accepted = {}
+        started = time.monotonic()
+        for sequence in range(120):
+            sent_envelope = {**envelope, "payload": {"sequence": sequence}}
+            sent = client.post("/api/v1/unified/dispatch", json=sent_envelope)
+            assert sent.status_code == 200, sent.text
+            assert sent.json()["status"] == "ACCEPTED"
+            assert sent.json()["persisted"] is True
+            accepted[sent.json()["event_id"]] = sent_envelope
+        assert len(accepted) == 120
+        assert time.monotonic() - started < 60, "Burst exceeded the real rate window"
+        exported = client.get("/api/v1/export")
+        assert exported.status_code == 200, exported.text
+        baseline = exported.json()
+        assert baseline["tasks"] == []
+        assert len(baseline["events"]) == 120
+        assert len({event["id"] for event in baseline["events"]}) == 120
+        for event in baseline["events"]:
+            assert event["topic"] == "unified-dispatch"
+            assert json.loads(event["message"]) == accepted[event["id"]]
+
+        rejected_envelope = {**envelope, "payload": {"sequence": "rejected"}}
+        rejected = client.post("/api/v1/unified/dispatch", json=rejected_envelope)
+        assert rejected.status_code == 429, rejected.text
+        assert rejected.json() == {"detail": "Unified dispatch rate limit exceeded."}
+        retry_after = int(rejected.headers["Retry-After"])
+        assert 1 <= retry_after <= 60
+        retry_at = time.monotonic() + retry_after
+        state = client.get("/api/v1/unified/state")
+        assert state.status_code == 200, state.text
+        latest = state.json()["last_dispatch"]
+        assert latest["event_id"] == baseline["events"][-1]["id"]
+        assert latest["envelope"] == accepted[latest["event_id"]]
+
+        created = client.post(
+            "/api/v1/tasks", json={"title": "Task writes work during dispatch throttling"}
+        )
+        assert created.status_code == 201, created.text
+        tasks = client.get("/api/v1/tasks")
+        assert tasks.status_code == 200, tasks.text
+        assert tasks.json() == [created.json()]
+        unchanged = client.get("/api/v1/export")
+        assert unchanged.status_code == 200, unchanged.text
+        assert unchanged.json()["tasks"] == [created.json()]
+        assert unchanged.json()["events"] == baseline["events"]
+
+        # Honor the actual Retry-After, without changing production limits,
+        # mocking the clock, or restarting away the in-memory rate history.
+        time.sleep(max(0, retry_at - time.monotonic()))
+        recovered_envelope = {**envelope, "payload": {"sequence": "recovered"}}
+        with client.stream(
+            "GET",
+            "/api/v1/unified/stream",
+            headers={"Last-Event-ID": str(latest["event_id"])},
+        ) as response:
+            recovered = client.post("/api/v1/unified/dispatch", json=recovered_envelope)
+            assert recovered.status_code == 200, recovered.text
+            assert recovered.json()["status"] == "ACCEPTED"
+            assert recovered.json()["persisted"] is True
+            assert recovered.json()["live_subscribers_notified"] >= 1
+            received = next(stream_events(response))
+            assert received["event"] == "dispatch"
+            assert int(received["id"]) == recovered.json()["event_id"]
+            record = json.loads(received["data"])
+            assert record["event_id"] > latest["event_id"]
+            assert record["envelope"] == recovered_envelope
+        assert read_dispatch(client, latest["event_id"]) == record
+        final = client.get("/api/v1/export")
+        assert final.status_code == 200, final.text
+        assert final.json()["tasks"] == [created.json()]
+        assert final.json()["events"] == [
+            *baseline["events"],
+            {
+                "id": record["event_id"],
+                "topic": "unified-dispatch",
+                "message": json.dumps(
+                    recovered_envelope, ensure_ascii=False, separators=(",", ":")
+                ),
+                "created_at": record["created_at"],
+            },
+        ]
+        state = client.get("/api/v1/unified/state")
+        assert state.status_code == 200, state.text
+        assert state.json()["last_dispatch"] == record
+
+
 @pytest.mark.parametrize("cursor", ["expired", "future"])
 def test_stream_cursor_errors_reset_and_reconnect(tmp_path: Path, cursor: str) -> None:
     timestamp = "2026-11-12T00:00:00+00:00"

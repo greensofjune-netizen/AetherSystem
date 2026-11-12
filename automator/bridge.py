@@ -182,8 +182,8 @@ def run(
             "backend readiness (task persistence, dispatch, SSE reconnect/restart, "
             "clean shutdown, backup recovery, damaged-backup rejection, "
             "failure containment, concurrent writes/restart, crash recovery, "
-            "and cursor recovery)? "
-            "No model server is required.",
+            "cursor recovery, and rate-limit recovery)? "
+            "Includes a real 60-second rate window. No model server is required.",
             confirm=True,
         )
         interpreter = (

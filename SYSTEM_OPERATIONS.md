@@ -260,6 +260,14 @@ receive an explicit reset containing the latest durable dispatch. Reconnecting
 from that ID delivers new events, replays them on another reconnect, and
 continues live without duplicates at the replay/live boundary. Exact stored
 history and latest dispatch state are verified afterward.
+The rate-limit drill uses the production 120-dispatch, 60-second per-host
+limit and real monotonic clock. The next dispatch must return HTTP 429 with
+`Retry-After` between 1 and 60 seconds, leaving durable events and latest
+dispatch state unchanged while task reads/writes succeed. After waiting for
+that header without restarting, dispatch, live SSE delivery and replay must
+recover, with exact stored records. Allow approximately one extra minute
+for this bounded drill; it does not certify throughput or denial-of-service
+resistance.
 No live model or real project database is used. Node.js, browser and native
 UI checks remain separate.
 

@@ -396,6 +396,13 @@ It checks malformed/negative cursor errors and explicit resets for expired
 and future cursors. Reconnecting from the reset ID must deliver new events,
 replay them in order on another reconnect, and continue live without duplicate
 events at the replay/live boundary. Stored history remains intact.
+Its rate-limit drill sends the production allowance of 120 dispatches per
+client host within 60 seconds, verifies HTTP 429 and a bounded `Retry-After`,
+and checks that rejection leaves events and latest dispatch state unchanged.
+Task reads and writes still succeed. It waits for the real `Retry-After`
+without restarting or mocking the clock, then verifies a new dispatch,
+live SSE delivery, replay and exact stored records. This adds approximately
+one minute to the suite; it is not a throughput or denial-of-service benchmark.
 It runs in CI too. Run it alone with
 `python -m pytest -q tests/test_backend_readiness.py`.
 Existing Quick Actions invoke the linked source files, so they pick up this
