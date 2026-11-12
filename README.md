@@ -75,6 +75,15 @@ Before publishing:
 
 ## Optional companion experiences
 
+### Standalone Quantum Light Lab
+
+Open [Quantum Light Lab](./quantum-lab/index.html) directly in a browser for an
+offline double-slit simulation with individual photon detections, interference
+graphs, which-path controls, and entropy/surprisal charts. It has no Aether
+runtime or external dependencies. All results are explicitly simulated, not
+measurements of real quantum entropy. See the [lab guide](./quantum-lab/README.md)
+for the physics model, limitations, controls, and tests.
+
 ## Matrix Aristotle desktop companion
 
 Matrix Aristotle unifies Galileo's persistent chat and multimodal controls,

@@ -1,0 +1,210 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="dark">
+  <meta name="description" content="An offline, interactive simulation of single-photon interference and measurement entropy.">
+  <title>Quantum Light Lab | Wave-particle duality</title>
+  <link rel="icon" href="data:,">
+  <link rel="stylesheet" href="styles.css">
+  <script src="model.js" defer></script>
+  <script src="app.js" defer></script>
+</head>
+<body>
+  <header class="topbar">
+    <a class="brand" href="#main"><span class="brand-mark" aria-hidden="true">Q</span> QUANTUM LIGHT LAB</a>
+    <span class="badge">v0.1.0 / OFFLINE / SIMULATED</span>
+  </header>
+  <main id="main">
+    <div class="intro">
+      <div>
+        <p class="eyebrow">EXPERIMENT 01 / THE DOUBLE SLIT</p>
+        <h1>One photon. <span>Two possibilities.</span></h1>
+        <p class="lede">Watch individual detections build an interference pattern. Explore what changes when the paths become distinguishable.</p>
+        <p class="muted small">Educational simulation with a separate exploratory equilibrium model. No experimental evidence for a new quantum law or physical cohesion measurement is claimed.</p>
+      </div>
+      <a class="text-link" href="#explanation">Understand the experiment <span aria-hidden="true">&darr;</span></a>
+    </div>
+
+    <div class="lab-layout">
+      <aside class="panel controls">
+        <p class="eyebrow">YOUR EXPERIMENT</p>
+        <h2>Set the conditions</h2>
+        <p class="muted small">Changing the physics clears the current run so different experiments never mix.</p>
+        <div class="control">
+          <label for="which-path">Which-path information <output id="path-value" for="which-path">0%</output></label>
+          <input id="which-path" type="range" min="0" max="100" step="1" value="0" aria-describedby="path-help">
+          <div class="range-ends" aria-hidden="true"><span>Indistinguishable</span><span>Distinguishable</span></div>
+          <p id="path-help" class="small muted">Information available to the environment, not a person's attention. More information means less interference.</p>
+        </div>
+        <div class="control">
+          <label for="wavelength">Wavelength <output id="wavelength-value" for="wavelength">550 nm</output></label>
+          <input id="wavelength" type="range" min="380" max="750" step="5" value="550">
+          <div class="range-ends" aria-hidden="true"><span>380 nm</span><span>750 nm</span></div>
+        </div>
+        <div class="control">
+          <label for="separation">Slit separation <output id="separation-value" for="separation">0.25 mm</output></label>
+          <input id="separation" type="range" min="0.1" max="0.6" step="0.01" value="0.25">
+          <div class="range-ends" aria-hidden="true"><span>0.10 mm</span><span>0.60 mm</span></div>
+        </div>
+        <div class="control">
+          <label for="rate">Detection rate <output id="rate-value" for="rate">120 / s</output></label>
+          <input id="rate" type="range" min="10" max="1000" step="10" value="120" aria-describedby="rate-help">
+          <p id="rate-help" class="small muted">Simulated rate. Does not change the probability model.</p>
+        </div>
+        <button id="run" class="primary" type="button">Start experiment</button>
+        <div class="button-row">
+          <button id="single" type="button">Emit 1</button>
+          <button id="batch" type="button">Emit 1,000</button>
+        </div>
+        <div class="button-row secondary-actions">
+          <button id="reset" type="button">Clear run</button>
+          <button id="export" type="button" disabled>Export CSV</button>
+        </div>
+        <p id="status" role="status" class="status">Simulation inactive. Enable JavaScript to run this local simulation.</p>
+        <p id="error" role="alert" class="error" hidden></p>
+        <noscript><p class="error">Enable JavaScript to run this local simulation.</p></noscript>
+        <div class="fixed-setup small muted">FIXED GEOMETRY<br>Screen distance: 1.5 m<br>Slit width: 0.04 mm<br>Screen: -15 to +15 mm</div>
+      </aside>
+
+      <div class="dashboard">
+        <div class="metrics">
+          <div class="metric"><span>Photons detected</span><strong id="count">0</strong><small>One localized hit at a time</small></div>
+          <div class="metric"><span>Coherence / visibility</span><strong id="visibility">100%</strong><small>Ideal fringe contrast V</small></div>
+          <div class="metric"><span>Quantum cohesion</span><strong><output id="cohesion" for="which-path">100%</output></strong><small>Exploratory proxy: V² = 1 − D²</small></div>
+          <div class="metric"><span>Path-state entropy</span><strong><span id="path-entropy">0.000</span> <em>bits</em></strong><small>Reduced two-path quantum state</small></div>
+          <div class="metric"><span>Rare-bin detections</span><strong id="rare-count">0</strong><small>Surprisal &ge; 8 bits; not collapse evidence</small></div>
+        </div>
+
+        <section class="panel detector-panel">
+          <div class="panel-heading"><div><p class="eyebrow">01 / LOCALIZED EVENTS</p><h2>The detection screen</h2></div><span id="mode" class="pill">Coherent paths</span></div>
+          <svg class="apparatus" viewBox="0 0 760 94" role="img" aria-labelledby="apparatus-title apparatus-desc">
+            <title id="apparatus-title">Double-slit apparatus schematic</title>
+            <desc id="apparatus-desc">A photon source illuminates two slits. Amplitudes from both slits contribute to the probability of detection on a distant screen. Lines are schematic connections, not photon trajectories.</desc>
+            <defs><linearGradient id="beam"><stop stop-color="#6ce2d2" stop-opacity=".28"/><stop offset="1" stop-color="#6ce2d2" stop-opacity=".02"/></linearGradient></defs>
+            <path d="M75 39 L268 26 L268 52 Z M280 26 L674 12 L674 68 Z M280 52 L674 12 L674 68 Z" fill="url(#beam)"/>
+            <path d="M83 39H262 M280 26L674 39 M280 52L674 39" stroke="#6ce2d2" stroke-opacity=".5" stroke-dasharray="4 5" fill="none"/>
+            <circle cx="75" cy="39" r="8" fill="#6ce2d2"/>
+            <path d="M272 9V22 M272 31V47 M272 56V70" stroke="#b6c8d0" stroke-width="5"/>
+            <path d="M677 9V70" stroke="#f4b578" stroke-width="4"/>
+            <g fill="#b6c8d0" font-size="12" font-family="system-ui, sans-serif"><text x="45" y="90">Source</text><text x="242" y="90">Two slits</text><text x="639" y="90">Screen</text></g>
+          </svg>
+          <figure>
+            <canvas id="detector" role="img" aria-label="Accumulated simulated photon detections" aria-describedby="detector-caption"></canvas>
+            <div class="axis-ends"><span>-15 mm</span><span>Screen position x</span><span>+15 mm</span></div>
+            <figcaption id="detector-caption">Each dot is one simulated detection. Horizontal position follows the double-slit model; vertical placement is decorative. The latest 6,000 hits are displayed; all hits count in the histogram.</figcaption>
+          </figure>
+        </section>
+
+        <div class="chart-grid">
+          <section class="panel">
+            <div class="panel-heading"><div><p class="eyebrow">02 / THE PATTERN</p><h2>Probability &amp; detections</h2></div></div>
+            <div class="legend"><span class="expected">Expected</span><span class="observed">Observed</span></div>
+            <figure>
+              <canvas id="distribution" role="img" aria-label="Expected and observed screen probability by position" aria-describedby="distribution-caption"></canvas>
+              <figcaption id="distribution-caption">Probability per 0.25 mm bin, conditioned on detection within the screen. Bars should approach the curve over many photons.</figcaption>
+            </figure>
+            <p class="chart-readout">Fringe spacing <strong id="spacing">3.30 mm</strong> <span class="muted">/ screen entropy</span> <strong id="screen-entropy">0 bits</strong></p>
+          </section>
+          <section class="panel">
+            <div class="panel-heading"><div><p class="eyebrow">03 / UNCERTAINTY</p><h2>Entropy &amp; surprise</h2></div></div>
+            <div class="legend"><span class="expected">Surprisal</span><span class="entropy-key">Rolling entropy</span><span class="rare-key">Rare bin</span></div>
+            <figure>
+              <canvas id="entropy" role="img" aria-label="Surprisal per detection and rolling empirical screen entropy in bits" aria-describedby="entropy-caption"></canvas>
+              <figcaption id="entropy-caption">Last 160 detections. Surprisal = -log2 P(bin); high spikes mean rare outcomes in this model. Dashed line: empirical Shannon entropy of up to 128 recent hits, biased low for small samples.</figcaption>
+            </figure>
+            <p class="chart-readout">Rolling entropy <strong id="rolling-entropy">0.000 bits</strong></p>
+          </section>
+        </div>
+        <details id="data-details" class="panel">
+          <summary>Explore the chart data</summary>
+          <p class="muted small">Live numerical alternatives to both charts. Pause the experiment to inspect a stable snapshot.</p>
+          <div class="data-grid">
+            <div class="table-wrap" tabindex="0" role="region" aria-label="Screen probability data, scrollable">
+              <table><caption>Screen histogram (all detections)</caption><thead><tr><th scope="col">x (mm)</th><th scope="col">Expected %</th><th scope="col">Hits</th><th scope="col">Observed %</th></tr></thead><tbody id="bin-data"></tbody></table>
+            </div>
+            <div class="table-wrap" tabindex="0" role="region" aria-label="Entropy trace data, scrollable">
+              <table><caption>Recent detections (bits)</caption><thead><tr><th scope="col">Photon</th><th scope="col">Surprisal</th><th scope="col">Rolling H</th><th scope="col">Rare bin?</th></tr></thead><tbody id="trace-data"></tbody></table>
+            </div>
+          </div>
+        </details>
+      </div>
+    </div>
+
+    <section id="explanation" class="explanation">
+      <p class="eyebrow">WHAT YOU ARE SEEING</p>
+      <h2>Not a wave turning into a little ball.</h2>
+      <div class="explanation-grid">
+        <article><span class="step">01</span><h3>Localized detection</h3><p>Light is quantum. Every photon produces a localized detection, even when interference is present. The dots are measurement outcomes, not pictures of photons flying along a path.</p></article>
+        <article><span class="step">02</span><h3>Wave-like statistics</h3><p>Indistinguishable paths contribute amplitudes that interfere. As many photons arrive, alternating bright and dark fringes emerge. No individual detection needs to trace a wave.</p></article>
+        <article><span class="step">03</span><h3>Information changes the pattern</h3><p>Entanglement with a path marker makes paths distinguishable. This ideal balanced-path model uses V = sqrt(1 - D squared). At D = 1, interference disappears, but single-slit diffraction remains.</p></article>
+      </div>
+      <details class="model-notes">
+        <summary>Physics model, entropy definitions &amp; limitations</summary>
+        <p>We use the small-angle, far-field double-slit approximation: I(x) is proportional to sinc squared(pi a x / (lambda L)) times [1 + V cos(2 pi d x / (lambda L))], where sinc(z) = sin(z)/z. The 120 bin-center weights are normalized over this finite screen, then sampled. Sub-bin x positions are uniform. The schematic is not to scale.</p>
+        <p>D represents ideal which-path distinguishability for balanced slits with pure path-marker states, giving V = sqrt(1 - D squared). The reduced path state's eigenvalues are (1 + V)/2 and (1 - V)/2; their von Neumann entropy ranges from 0 to 1 bit. This simplified relation does not cover every noisy or unbalanced experiment.</p>
+        <p>Screen Shannon entropy H = -sum p log2 p is a different quantity, dependent on bin size and screen extent. Rolling entropy estimates it from up to 128 samples. Surprisal -log2 P(bin) describes an individual outcome. The 8-bit rare-bin threshold is a visualization convention, not a physical threshold or proof of collapse. None of these charts establishes a wave-to-particle transition.</p>
+        <p>Randomness comes from JavaScript Math.random. This is an educational simulation, not a quantum random-number generator, detector, hardware experiment, or cryptographic entropy source. No Aether runtime, network connection, accounts, or external libraries are used. Reloading closes the in-memory run; export the histogram if you want to keep it.</p>
+      </details>
+    </section>
+
+    <section class="panel notebook-equation" aria-labelledby="notebook-equation-title">
+      <div class="panel-heading">
+        <div><p class="eyebrow">FROM YOUR NOTEBOOK</p><h2 id="notebook-equation-title">Equilibrium equation</h2></div>
+      </div>
+      <figure>
+        <p class="equation" role="math" aria-label="E equals the integral over Omega of the divergence of W times xi minus P times one minus xi, multiplied by S sub eco and d Omega, equals zero">E = ∫<sub>Ω</sub> [∇·(W·ξ) − P(1−ξ)] · S<sub>eco</sub> dΩ = 0</p>
+        <figcaption>As transcribed: W is wave/fluid intelligence, P is particle/foundation rules, ξ is the state switch, and S<sub>eco</sub> is the ecosystem stewardship factor. The notes describe E = 0 as absolute equilibrium. Below we choose explicit dimensionless fields to explore the mathematics, not to establish a physical quantum law.</figcaption>
+      </figure>
+      <h3 id="equilibrium-model-title">Dimensionless equilibrium sandbox</h3>
+      <p class="muted small" id="equilibrium-model-help">Chosen assumptions: a one-dimensional domain Ω = [0, 1] with abstract coordinate u, not detector position; W(u) = w·u, P(u) = p, ξ(u) = ξ, and S<sub>eco</sub>(u) = s. All variables, derivatives, and E are dimensionless (unit 1). The fields are time-independent; W(0) = 0 and W(1) = w specify the boundary flux. These are modeling choices, not measurements.</p>
+      <fieldset class="equilibrium-controls" aria-describedby="equilibrium-model-help">
+        <legend>Choose the notebook fields</legend>
+        <div class="control">
+          <label for="notebook-wave">Wave strength w <output id="notebook-wave-value" for="notebook-wave">1.00 (dimensionless)</output></label>
+          <input id="notebook-wave" name="notebook-wave" type="range" min="0" max="2" step="0.01" value="1">
+        </div>
+        <div class="control">
+          <label for="notebook-particle">Particle strength p <output id="notebook-particle-value" for="notebook-particle">1.00 (dimensionless)</output></label>
+          <input id="notebook-particle" name="notebook-particle" type="range" min="0" max="2" step="0.01" value="1">
+        </div>
+        <div class="control">
+          <label for="notebook-xi">Wave weight ξ <output id="notebook-xi-value" for="notebook-xi">0.50 (dimensionless)</output></label>
+          <input id="notebook-xi" name="notebook-xi" type="range" min="0" max="1" step="0.01" value="0.5" aria-describedby="notebook-xi-help">
+          <p id="notebook-xi-help" class="muted small">ξ = 1 weights only the wave term; ξ = 0 weights only the particle term, following your clarification. This is separate from the experiment's which-path slider D.</p>
+        </div>
+        <div class="control">
+          <label for="notebook-stewardship">Stewardship weight s <output id="notebook-stewardship-value" for="notebook-stewardship">1.00 (dimensionless)</output></label>
+          <input id="notebook-stewardship" name="notebook-stewardship" type="range" min="0" max="1" step="0.01" value="1">
+        </div>
+      </fieldset>
+      <p class="muted small">In one dimension ∇·(Wξ) = d(w·u·ξ)/du = wξ, so the exact integral is E = s[wξ − p(1−ξ)]. When s &gt; 0 and w + p &gt; 0, E = 0 requires ξ = p/(w+p). No numerical quadrature is needed.</p>
+      <p class="chart-readout">Integral residual E (unit 1): <output id="equilibrium-residual" for="notebook-wave notebook-particle notebook-xi notebook-stewardship">0.000000</output><br>Equilibrium wave weight ξ (unit 1): <output id="equilibrium-xi" for="notebook-wave notebook-particle notebook-stewardship">0.5000</output></p>
+      <p id="equilibrium-status" role="status" class="muted small"></p>
+      <p class="muted small">This is an algebraic residual, not energy, a conservation law, or a stability test. The sandbox does not change photon detections, the cohesion proxy, or CSV exports. Its settings reset on reload.</p>
+      <p class="muted small cohesion-note">The Quantum cohesion card is a separate, illustrative proxy using the lab’s ideal relation V² = 1 − D² (D is which-path distinguishability). For example, D = 40% gives 84%. It is not a validated calculation of the full notebook equation.</p>
+    </section>
+
+    <section class="panel notebook-equation" aria-labelledby="lagrangian-title">
+      <div class="panel-heading">
+        <div><p class="eyebrow">FROM YOUR NOTEBOOK / REFERENCE ONLY</p><h2 id="lagrangian-title">Unified Lagrangian sketches</h2></div>
+      </div>
+      <p class="muted small">Tentative readings of two handwritten notes; ambiguous notation is marked below. These are not evaluated by the simulator and do not change photon detections or exports.</p>
+      <h3>Gauge and spin-connection sketch</h3>
+      <figure>
+        <p>ℒ ≈ ℒ<sub>loop</sub> − ¼ F<sub>μν</sub>F<sup>μν</sup> + ψ̄(iγ<sup>μ</sup>D<sub>μ</sub> − m)ψ</p>
+        <p>D<sub>μ</sub> ≈ ∂<sub>μ</sub> − ieA<sub>μ</sub> − iΓ̂<sub>μ</sub></p>
+        <figcaption>The first term and the connection symbol are tentative readings. The notes label the latter as a quantum-gravity spin connection, but do not define its form, units, or coupling.</figcaption>
+      </figure>
+      <h3>Gravity and scalar-field sketch</h3>
+      <figure>
+        <p>ℒ<sub>unified</sub> ≈ √−g [ (R + αR² + γR<sub>bounce</sub>)/(16πG) − ½g<sup>μν</sup>∇<sub>μ</sub>φ ∇<sub>ν</sub>φ − V(φ) − <em>dark-energy matrix term</em> ]</p>
+        <figcaption>The bounce notation and final matrix contraction are unclear in the photograph; R<sub>bounce</sub> is a placeholder reading, and the final term is not transcribed as an exact expression. The notes describe a curvature-squared correction, a bounce contribution, scalar-field dynamics, and a dark-energy balance matrix.</figcaption>
+      </figure>
+      <p class="muted small">The sketches do not specify the fields, action conventions, dynamics, initial or boundary conditions, or measurable parameters needed for a numerical model. They are hypotheses, not evidence or proof of a Big Bounce, quantum gravity, or the origin of the universe.</p>
+    </section>
+  </main>
+  <footer>QUANTUM LIGHT LAB v0.1.0 <span>Local by design. Curious by nature.</span><a href="README.md">Documentation &amp; verification</a></footer>
+</body>
+</html>
