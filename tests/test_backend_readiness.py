@@ -92,24 +92,29 @@ def running_backend(directory: Path) -> Iterator[httpx.Client]:
             assert process.returncode == 0, log_path.read_text()
 
 
+def stream_events(response: httpx.Response) -> Iterator[dict[str, str]]:
+    assert response.status_code == 200
+    assert response.headers["content-type"].startswith("text/event-stream")
+    fields: dict[str, str] = {}
+    for line in response.iter_lines():
+        if not line:
+            if "data" in fields:
+                yield fields
+            fields = {}
+        elif ":" in line:
+            key, value = line.split(":", 1)
+            fields[key] = value.lstrip()
+
+
 def read_dispatch(client: httpx.Client, cursor: int) -> dict:
     with client.stream(
         "GET", "/api/v1/unified/stream", headers={"Last-Event-ID": str(cursor)}
     ) as response:
-        assert response.status_code == 200
-        assert response.headers["content-type"].startswith("text/event-stream")
-        fields = {}
-        for line in response.iter_lines():
-            if not line:
-                if "data" in fields:
-                    assert fields["event"] == "dispatch"
-                    record = json.loads(fields["data"])
-                    assert int(fields["id"]) == record["event_id"] > cursor
-                    return record
-                fields.clear()
-            elif ":" in line:
-                key, value = line.split(":", 1)
-                fields[key] = value.lstrip()
+        for fields in stream_events(response):
+            assert fields["event"] == "dispatch"
+            record = json.loads(fields["data"])
+            assert int(fields["id"]) == record["event_id"] > cursor
+            return record
     pytest.fail("The stream closed without a dispatch event.")
 
 
@@ -150,14 +155,31 @@ def test_backend_readiness_task_dispatch_reconnect_and_restart(tmp_path: Path) -
         assert replay["event_id"] == first_id
         assert replay["envelope"] == envelope
 
-        envelope["payload"] = {"sequence": 2}
-        second = client.post("/api/v1/unified/dispatch", json=envelope)
-        assert second.status_code == 200, second.text
-        second_id = second.json()["event_id"]
-        assert second_id > first_id
+        with client.stream("GET", "/api/v1/unified/stream") as response:
+            events = stream_events(response)
+            snapshot = next(events)
+            assert snapshot["event"] == "snapshot"
+            assert int(snapshot["id"]) == first_id
+            assert json.loads(snapshot["data"]) == replay
+
+            envelope["payload"] = {"sequence": 2}
+            second = client.post("/api/v1/unified/dispatch", json=envelope)
+            assert second.status_code == 200, second.text
+            assert second.json()["persisted"] is True
+            assert second.json()["live_subscribers_notified"] >= 1
+            second_id = second.json()["event_id"]
+            assert second_id > first_id
+            live = next(events)
+            assert live["event"] == "dispatch"
+            assert int(live["id"]) == second_id
+            live_record = json.loads(live["data"])
+            assert live_record["event_id"] == second_id
+            assert live_record["envelope"] == envelope
+
         replay = read_dispatch(client, first_id)
         assert replay["event_id"] == second_id
         assert replay["envelope"] == envelope
+        assert replay == live_record
         assert client.get("/api/v1/unified/state").json()["last_dispatch"] == replay
         oversized = client.post(
             "/api/v1/unified/dispatch",

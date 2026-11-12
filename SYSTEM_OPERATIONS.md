@@ -227,7 +227,8 @@ Run `python -m pytest -q tests/test_backend_readiness.py`, or choose
 **Galileo - Run Project Tests** in Automator to run it with the complete Python
 suite after confirmation. The same test runs in CI. It uses a temporary store
 and ephemeral loopback port, verifies HTTP/CLI task persistence, dispatch,
-SSE reconnect and replay after a backend restart, and shuts down its server.
+live SSE delivery, reconnect and replay after a backend restart, and shuts
+down its server.
 No live model or real project database is used. Node.js, browser and native
 UI checks remain separate.
 

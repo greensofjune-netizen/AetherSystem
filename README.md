@@ -362,7 +362,8 @@ Tests** runs the complete Python pytest suite, including
 [`tests/test_backend_readiness.py`](./tests/test_backend_readiness.py).
 That readiness check starts a temporary loopback backend on an automatically
 assigned port, creates a task, verifies CLI/API persistence, dispatches events,
-reconnects SSE, restarts the backend to verify durable replay, and checks clean
+verifies a connected SSE client receives a live event, reconnects SSE,
+restarts the backend to verify durable replay, and checks clean
 shutdown. It uses only a temporary database and requires no model server.
 It runs in CI too. Run it alone with
 `python -m pytest -q tests/test_backend_readiness.py`.
