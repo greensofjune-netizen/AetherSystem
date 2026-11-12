@@ -253,6 +253,13 @@ It waits for process exit before restarting against the same temporary
 database, verifies every acknowledged record, ordered SSE replay and latest
 dispatch state, and confirms a new write succeeds. This does not simulate
 power loss or disk failure, or assert outcomes for unacknowledged requests.
+The cursor-recovery drill restores 501 synthetic dispatch records through
+HTTP to exceed the production 500-event replay window without changing rate
+limits. Malformed/negative cursors return HTTP 400; expired/future cursors
+receive an explicit reset containing the latest durable dispatch. Reconnecting
+from that ID delivers new events, replays them on another reconnect, and
+continues live without duplicates at the replay/live boundary. Exact stored
+history and latest dispatch state are verified afterward.
 No live model or real project database is used. Node.js, browser and native
 UI checks remain separate.
 

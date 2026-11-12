@@ -119,6 +119,7 @@ def test_project_tests_confirm_and_report_readiness_results(
         assert "failure containment" in dialogs[0][0]
         assert "concurrent writes/restart" in dialogs[0][0]
         assert "crash recovery" in dialogs[0][0]
+        assert "cursor recovery" in dialogs[0][0]
         assert command == [str(Path(sys.executable)), "-m", "pytest", "-q"]
         assert kwargs["cwd"] == tmp_path
         assert kwargs["capture_output"] is True

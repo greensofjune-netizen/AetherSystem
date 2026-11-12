@@ -390,6 +390,12 @@ shutdown, then restarts against the same temporary database. It verifies all
 acknowledged records, ordered SSE replay, latest dispatch state and a new
 successful write. This tests process termination, not power loss, disk failure
 or the fate of requests that were not acknowledged.
+Its cursor-recovery drill restores 501 synthetic dispatch records through HTTP
+to exceed the production 500-event replay window without bypassing rate limits.
+It checks malformed/negative cursor errors and explicit resets for expired
+and future cursors. Reconnecting from the reset ID must deliver new events,
+replay them in order on another reconnect, and continue live without duplicate
+events at the replay/live boundary. Stored history remains intact.
 It runs in CI too. Run it alone with
 `python -m pytest -q tests/test_backend_readiness.py`.
 Existing Quick Actions invoke the linked source files, so they pick up this
