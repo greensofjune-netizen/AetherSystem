@@ -365,6 +365,11 @@ assigned port, creates a task, verifies CLI/API persistence, dispatches events,
 verifies a connected SSE client receives a live event, reconnects SSE,
 restarts the backend to verify durable replay, and checks clean
 shutdown. It uses only a temporary database and requires no model server.
+The same test file also runs a recovery drill: create temporary pending and
+completed tasks plus events through HTTP, create a backup, restore it with
+the CLI into a fresh database, and compare every task/event field through
+HTTP. It checks that an unconfirmed restore over existing data is rejected
+without changing records or the backup file.
 It runs in CI too. Run it alone with
 `python -m pytest -q tests/test_backend_readiness.py`.
 Existing Quick Actions invoke the linked source files, so they pick up this

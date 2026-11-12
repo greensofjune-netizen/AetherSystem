@@ -229,6 +229,10 @@ suite after confirmation. The same test runs in CI. It uses a temporary store
 and ephemeral loopback port, verifies HTTP/CLI task persistence, dispatch,
 live SSE delivery, reconnect and replay after a backend restart, and shuts
 down its server.
+Its recovery drill creates a backup from temporary tasks and events through
+the API, restores with the CLI into a fresh database, compares every record
+through HTTP, and checks that restoring over existing data without replacement
+is refused without modifying the records or backup.
 No live model or real project database is used. Node.js, browser and native
 UI checks remain separate.
 

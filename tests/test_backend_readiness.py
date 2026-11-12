@@ -31,7 +31,10 @@ with socket.socket() as listener:
         sys.stdin.readline()
         server.should_exit = True
     Thread(target=stop_on_input, daemon=True).start()
-    Path(sys.argv[1]).write_text(str(listener.getsockname()[1]), encoding="ascii")
+    port_file = Path(sys.argv[1])
+    pending = port_file.with_suffix(".tmp")
+    pending.write_text(str(listener.getsockname()[1]), encoding="ascii")
+    pending.replace(port_file)
     server.run(sockets=[listener])
 """
 
@@ -193,3 +196,70 @@ def test_backend_readiness_task_dispatch_reconnect_and_restart(tmp_path: Path) -
         replay = read_dispatch(client, first_id)
         assert replay["event_id"] == second_id
         assert replay["envelope"] == envelope
+
+
+def test_backup_recovery_preserves_records_and_refuses_overwrite(tmp_path: Path) -> None:
+    source = tmp_path / "source"
+    destination = tmp_path / "restored"
+    source.mkdir()
+    destination.mkdir()
+    with running_backend(source) as client:
+        for title, priority in (("Pending recovery task", "low"), ("Done task", "high")):
+            response = client.post(
+                "/api/v1/tasks",
+                json={
+                    "title": title,
+                    "description": "Preserve task metadata",
+                    "priority": priority,
+                    "due_date": "2026-12-01",
+                },
+            )
+            assert response.status_code == 201, response.text
+        completed = client.post(f"/api/v1/tasks/{response.json()['id']}/complete")
+        assert completed.status_code == 200, completed.text
+        for message in ("First recovery event", "Second recovery event"):
+            response = client.post(
+                "/api/v1/events", json={"topic": "recovery", "message": message}
+            )
+            assert response.status_code == 201, response.text
+        exported = client.get("/api/v1/export")
+        assert exported.status_code == 200, exported.text
+        expected = exported.json()
+        backup = client.post("/api/v1/backups", json={})
+        assert backup.status_code == 201, backup.text
+        backup_path = Path(backup.json()["path"])
+        assert backup_path.parent == source / ".aether-backups"
+        backup_bytes = backup_path.read_bytes()
+        saved = json.loads(backup_bytes)
+        assert saved["schema_version"] == expected["schema_version"] == 1
+        assert saved["tasks"] == expected["tasks"]
+        assert saved["events"] == expected["events"]
+
+    result = subprocess.run(
+        [
+            sys.executable, "-m", "aether_engine",
+            "--database", str(destination / "readiness.sqlite3"),
+            "restore", str(backup_path),
+        ],
+        cwd=destination,
+        env={**os.environ, "PYTHONPATH": str(ROOT / "src")},
+        capture_output=True,
+        text=True,
+        timeout=10,
+    )
+    assert result.returncode == 0, result.stdout + result.stderr
+    with running_backend(destination) as client:
+        recovered = client.get("/api/v1/export")
+        assert recovered.status_code == 200, recovered.text
+        assert recovered.json()["tasks"] == expected["tasks"]
+        assert recovered.json()["events"] == expected["events"]
+        assert {task["status"] for task in expected["tasks"]} == {"pending", "done"}
+
+        rejected = client.post("/api/v1/restore", json={"backup": saved})
+        assert rejected.status_code == 422, rejected.text
+        assert "use --replace" in rejected.json()["detail"]
+        unchanged = client.get("/api/v1/export")
+        assert unchanged.status_code == 200, unchanged.text
+        assert unchanged.json()["tasks"] == expected["tasks"]
+        assert unchanged.json()["events"] == expected["events"]
+    assert backup_path.read_bytes() == backup_bytes
