@@ -180,6 +180,16 @@ native desktop UI require their own dependencies and environment. CI tests
 Python 3.11 and 3.14 on macOS and Linux; it does not certify Windows, a
 deployed service, model-answer quality, or macOS app notarization.
 
+The repeatable backend journey is
+[`tests/test_backend_readiness.py`](./tests/test_backend_readiness.py).
+Run `python -m pytest -q tests/test_backend_readiness.py`, or choose
+**Galileo - Run Project Tests** in Automator to run it with the complete Python
+suite after confirmation. The same test runs in CI. It uses a temporary store
+and ephemeral loopback port, verifies HTTP/CLI task persistence, dispatch,
+SSE reconnect and replay after a backend restart, and shuts down its server.
+No live model or real project database is used. Node.js, browser and native
+UI checks remain separate.
+
 For a non-destructive local CLI smoke test, use a **new empty directory** and
 explicitly point the CLI at a database inside it:
 

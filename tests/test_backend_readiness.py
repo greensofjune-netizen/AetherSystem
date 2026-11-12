@@ -1,0 +1,173 @@
+"""Real loopback HTTP readiness journey, also run by Automator's pytest action."""
+
+import json
+import os
+import subprocess
+import sys
+import time
+from collections.abc import Iterator
+from contextlib import contextmanager
+from pathlib import Path
+
+import httpx
+import pytest
+
+ROOT = Path(__file__).resolve().parents[1]
+SERVER = """
+import socket
+import sys
+from pathlib import Path
+from threading import Thread
+
+import uvicorn
+
+with socket.socket() as listener:
+    listener.bind(("127.0.0.1", 0))
+    listener.listen(128)
+    server = uvicorn.Server(uvicorn.Config(
+        "aether_engine.server:app", log_level="warning", access_log=False,
+    ))
+    def stop_on_input():
+        sys.stdin.readline()
+        server.should_exit = True
+    Thread(target=stop_on_input, daemon=True).start()
+    Path(sys.argv[1]).write_text(str(listener.getsockname()[1]), encoding="ascii")
+    server.run(sockets=[listener])
+"""
+
+
+@contextmanager
+def running_backend(directory: Path) -> Iterator[httpx.Client]:
+    port_file = directory / "port.txt"
+    port_file.unlink(missing_ok=True)
+    environment = {
+        key: value for key, value in os.environ.items()
+        if not key.startswith("AETHER_")
+    }
+    environment.update(
+        AETHER_DATABASE_PATH=str(directory / "readiness.sqlite3"),
+        AETHER_MODEL_PATH=str(directory / "no-model.gguf"),
+        PYTHONPATH=str(ROOT / "src"),
+    )
+    log_path = directory / "server.log"
+    with log_path.open("w", encoding="utf-8") as log:
+        process = subprocess.Popen(
+            [sys.executable, "-c", SERVER, str(port_file)],
+            cwd=directory,
+            env=environment,
+            stdin=subprocess.PIPE,
+            stdout=log,
+            stderr=log,
+            text=True,
+        )
+        try:
+            deadline = time.monotonic() + 20
+            with httpx.Client(timeout=2, trust_env=False) as client:
+                while time.monotonic() < deadline:
+                    assert process.poll() is None, log_path.read_text()
+                    if port_file.exists():
+                        port = int(port_file.read_text(encoding="ascii"))
+                        client.base_url = f"http://127.0.0.1:{port}"
+                        try:
+                            response = client.get("/health")
+                        except httpx.TransportError:
+                            time.sleep(0.05)
+                            continue
+                        assert response.status_code == 200, response.text
+                        assert response.json()["model_available"] is False
+                        break
+                    time.sleep(0.05)
+                else:
+                    pytest.fail(f"Backend did not become ready:\n{log_path.read_text()}")
+                yield client
+        finally:
+            try:
+                process.communicate(
+                    input="stop\n" if process.poll() is None else None, timeout=10
+                )
+            except subprocess.TimeoutExpired:
+                process.kill()
+                process.wait(timeout=5)
+                pytest.fail(f"Backend did not stop gracefully:\n{log_path.read_text()}")
+            assert process.returncode == 0, log_path.read_text()
+
+
+def read_dispatch(client: httpx.Client, cursor: int) -> dict:
+    with client.stream(
+        "GET", "/api/v1/unified/stream", headers={"Last-Event-ID": str(cursor)}
+    ) as response:
+        assert response.status_code == 200
+        assert response.headers["content-type"].startswith("text/event-stream")
+        fields = {}
+        for line in response.iter_lines():
+            if not line:
+                if "data" in fields:
+                    assert fields["event"] == "dispatch"
+                    record = json.loads(fields["data"])
+                    assert int(fields["id"]) == record["event_id"] > cursor
+                    return record
+                fields.clear()
+            elif ":" in line:
+                key, value = line.split(":", 1)
+                fields[key] = value.lstrip()
+    pytest.fail("The stream closed without a dispatch event.")
+
+
+def test_backend_readiness_task_dispatch_reconnect_and_restart(tmp_path: Path) -> None:
+    database = tmp_path / "readiness.sqlite3"
+    with running_backend(tmp_path) as client:
+        created = client.post("/api/v1/tasks", json={"title": "Readiness test"})
+        assert created.status_code == 201, created.text
+        task = created.json()
+        assert task in client.get("/api/v1/tasks").json()
+        exported = subprocess.run(
+            [
+                sys.executable, "-m", "aether_engine",
+                "--database", str(database), "export",
+            ],
+            cwd=tmp_path,
+            env={**os.environ, "PYTHONPATH": str(ROOT / "src")},
+            capture_output=True,
+            text=True,
+            check=True,
+            timeout=10,
+        )
+        assert json.loads(exported.stdout)["tasks"] == [task]
+
+        envelope = {
+            "protocol_version": "1.0.0",
+            "source_lang": "python",
+            "node": "ATLAS",
+            "event": "READINESS_TEST",
+            "timestamp": 1.0,
+            "payload": {"sequence": 1},
+        }
+        first = client.post("/api/v1/unified/dispatch", json=envelope)
+        assert first.status_code == 200, first.text
+        assert first.json()["persisted"] is True
+        first_id = first.json()["event_id"]
+        replay = read_dispatch(client, 0)
+        assert replay["event_id"] == first_id
+        assert replay["envelope"] == envelope
+
+        envelope["payload"] = {"sequence": 2}
+        second = client.post("/api/v1/unified/dispatch", json=envelope)
+        assert second.status_code == 200, second.text
+        second_id = second.json()["event_id"]
+        assert second_id > first_id
+        replay = read_dispatch(client, first_id)
+        assert replay["event_id"] == second_id
+        assert replay["envelope"] == envelope
+        assert client.get("/api/v1/unified/state").json()["last_dispatch"] == replay
+        oversized = client.post(
+            "/api/v1/unified/dispatch",
+            content=b" " * 32_769,
+            headers={"Content-Type": "application/json"},
+        )
+        assert oversized.status_code == 413
+
+    with running_backend(tmp_path) as client:
+        assert client.get("/api/v1/tasks").json() == [task]
+        replay = read_dispatch(client, first_id)
+        assert replay["event_id"] == second_id
+        assert replay["envelope"] == envelope

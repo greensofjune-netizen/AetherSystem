@@ -354,7 +354,21 @@ Ollama and does not save it in Galileo or use conversation history. The
 selected-text action asks for confirmation before sending. Ollama must already
 be running. Do not send sensitive text.
 
-The test and backup actions ask for confirmation. The backup action uses
+The test and backup actions ask for confirmation. **Galileo - Run Project
+Tests** runs the complete Python pytest suite, including
+[`tests/test_backend_readiness.py`](./tests/test_backend_readiness.py).
+That readiness check starts a temporary loopback backend on an automatically
+assigned port, creates a task, verifies CLI/API persistence, dispatches events,
+reconnects SSE, restarts the backend to verify durable replay, and checks clean
+shutdown. It uses only a temporary database and requires no model server.
+It runs in CI too. Run it alone with
+`python -m pytest -q tests/test_backend_readiness.py`.
+Existing Quick Actions invoke the linked source files, so they pick up this
+test without reinstalling; frozen desktop apps must be rebuilt to show the
+updated confirmation text. The action does not run Node.js/Playwright tests,
+validate model-answer quality, or install dependencies.
+
+The backup action uses
 consistent SQLite snapshots, then writes an Aether JSON export to this project's
 `.aether-backups/` and a Galileo SQLite backup to
 `~/Library/Application Support/Galileo/Backups/`; `GALILEO_DATA_DIR` can

@@ -177,7 +177,12 @@ def run(
         response = ask_model(read_prompt())
         dialog(f"Galileo response:\n\n{response}")
     elif action == "test":
-        dialog("Run the complete project test suite now?", confirm=True)
+        dialog(
+            "Run the complete Python project test suite, including isolated "
+            "backend readiness (task persistence, dispatch, SSE reconnect/restart, "
+            "and clean shutdown)? No model server is required.",
+            confirm=True,
+        )
         interpreter = (
             project / ".venv" / "bin" / "python"
             if getattr(sys, "frozen", False)

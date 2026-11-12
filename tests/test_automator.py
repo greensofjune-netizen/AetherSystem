@@ -100,6 +100,49 @@ def test_prompt_without_selection_uses_dialog(monkeypatch):
     assert bridge.read_prompt() == "my question"
 
 
+@pytest.mark.parametrize("exit_code", [0, 1])
+def test_project_tests_confirm_and_report_readiness_results(
+    tmp_path, monkeypatch, exit_code
+):
+    dialogs = []
+
+    def dialog(message, **kwargs):
+        dialogs.append((message, kwargs))
+        return "Continue"
+
+    def run(command, **kwargs):
+        assert len(dialogs) == 1
+        assert dialogs[0][1] == {"confirm": True}
+        assert "backend readiness" in dialogs[0][0]
+        assert command == [str(Path(sys.executable)), "-m", "pytest", "-q"]
+        assert kwargs["cwd"] == tmp_path
+        assert kwargs["capture_output"] is True
+        return subprocess.CompletedProcess(command, exit_code, "readiness result", "")
+
+    monkeypatch.setattr(bridge, "dialog", dialog)
+    monkeypatch.setattr(bridge.subprocess, "run", run)
+    if exit_code:
+        with pytest.raises(RuntimeError, match="Project tests failed"):
+            bridge.run("test", project=tmp_path)
+    else:
+        bridge.run("test", project=tmp_path)
+    assert f"Tests exited with code {exit_code}" in dialogs[-1][0]
+    assert "readiness result" in dialogs[-1][0]
+
+
+def test_project_tests_cancellation_does_not_run_tests(tmp_path, monkeypatch):
+    def cancel(*args, **kwargs):
+        raise InterruptedError("Cancelled by user.")
+
+    def unexpected_run(*args, **kwargs):
+        pytest.fail("Tests must not run after confirmation is cancelled.")
+
+    monkeypatch.setattr(bridge, "dialog", cancel)
+    monkeypatch.setattr(bridge.subprocess, "run", unexpected_run)
+    with pytest.raises(InterruptedError, match="Cancelled"):
+        bridge.run("test", project=tmp_path)
+
+
 def test_workflow_install_does_not_overwrite(tmp_path):
     if sys.platform != "darwin":
         pytest.skip("Automator is macOS-only")
