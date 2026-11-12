@@ -193,6 +193,7 @@ test("CSV has simulation provenance, physics parameters and all 120 histogram ro
   assert.match(csv, /SIMULATED/);
   assert.match(csv, /which_path=0.5/);
   assert.match(csv, /photons=1000/);
+  assert.match(csv, /bin_integration=simpson_64/);
   const data = csv.split("\n").filter((row) => !row.startsWith("#"));
   assert.equal(data.length, 121);
   assert.equal(data[0], "bin,position_mm,expected_probability,observed_count,observed_probability");

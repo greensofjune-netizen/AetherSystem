@@ -128,7 +128,7 @@
       plot.c.fillRect(plot.left + i * barWidth, plot.y(value),
         Math.max(0.5, barWidth - 0.5), plot.bottom - plot.y(value));
     });
-    // Expected values refer to bin centers, not the edges of the screen.
+    // Plot each integrated bin probability at its center, not at a screen edge.
     const curvePlot = { ...plot, x: (fraction) => plot.x((0.5 + fraction * (Q.BINS - 1)) / Q.BINS) };
     line(curvePlot, expected, "#6ce2d2");
   }

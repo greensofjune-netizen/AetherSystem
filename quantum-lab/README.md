@@ -45,9 +45,12 @@ V = sqrt(1 - D^2)
 Here `a = 0.04 mm` is slit width, `d = 0.10..0.60 mm` is slit separation,
 `L = 1.5 m` is screen distance, `lambda = 380..750 nm` is wavelength, and
 `D = 0..1` is ideal path distinguishability. There are 120 screen bins of
-width 0.25 mm over -15..+15 mm. Bin-center intensities are normalized over that
+width 0.25 mm over -15..+15 mm. Intensities are integrated over each bin using
+composite Simpson quadrature with 64 subintervals and normalized over that
 finite screen, so probabilities are conditional on detection in that region.
-Within-bin positions are uniform approximations, not integrated intensities.
+Within-bin dot positions are still uniform approximations; they do not follow
+the continuous intensity within a bin. CSV exports identify the integration
+method as `bin_integration=simpson_64`; older exports used bin-center weights.
 The model omits efficiencies, losses, detector noise, and detailed propagation.
 
 The complementarity equality assumes balanced paths and pure marker states.
@@ -169,19 +172,38 @@ varying stewardship cannot be taken outside the integral. The current controls
 do not represent either case. A vanishing integral generally does not require
 pointwise balance; here the integrand is constant by construction.
 
-Independent checks in `reference.test.cjs` sum two complex slit amplitudes
-instead of using the implementation's cosine-intensity formula, compare
-partial coherence against a coherent/incoherent intensity mixture, and integrate
-finite-difference fluxes over 1,000 cells. Probability differences are checked
-below `1e-12`; integral differences below `1e-10`. These are independently
-formulated checks in this codebase, not an external peer review.
+### Photon model verification
+
+For equal slits, let `A(x)` be the common single-slit amplitude and let
+`delta = pi*d*x/(lambda*L)`. Summing the two path amplitudes gives
+`|A exp(i delta) + A exp(-i delta)|^2 = 4 |A|^2 cos^2(delta)`.
+Using `2 cos^2(delta) = 1 + cos(2 delta)`, this is proportional to the
+implemented coherent intensity. The single-slit amplitude `A` is proportional
+to `sinc(pi*a*x/(lambda*L))`. The constant factor cancels when the integrated
+weights are normalized. For partial coherence, a visibility-weighted mixture
+of coherent and incoherent intensities yields the same interference factor.
+These derivations establish consistency with the stated ideal model, not
+empirical validity or an exact description of every apparatus.
+
+The checks in `reference.test.cjs` integrate independently constructed complex
+amplitudes and coherent/incoherent mixtures using eight-point Gauss-Legendre
+quadrature, rather than the implementation's Simpson rule. For wavelengths
+380, 550 and 750 nm, separations 0.10, 0.25 and 0.60 mm, and
+distinguishabilities 0, 0.2, 0.4, 0.8 and 1, the normalized distributions
+must have total variation distance below `1e-9`. This checks those points,
+not every possible slider setting or the true physical experiment.
+Other tests check normalization, symmetry, seeded sampling, entropy and limits.
+The equilibrium reference also integrates finite-difference fluxes over 1,000
+cells and checks the integral to `1e-10`. These are independently formulated
+checks in this codebase, not an external peer review.
 
 The optical phase arguments are dimensionless: `a*x/(lambda*L)` and
 `d*x/(lambda*L)` divide length squared by length squared. Fringe spacing
 `lambda*L/d` has length units. The default predicts 3.30 mm. At the smallest
 supported wavelength and largest separation it is 0.95 mm, only 3.8 screen bins
-per fringe. Bin-center sampling can therefore visibly undersample details;
-this is not a precision propagation solver. The screen's maximum angle is
+per fringe. Bin integration improves histogram probabilities but the 120-bin
+display still cannot resolve all fine details; this is not a precision
+propagation solver. The screen's maximum angle is
 approximately 0.01 radians. The far-field approximation is assumed, not
 validated against a full propagation calculation.
 
@@ -195,6 +217,27 @@ establishes collapse, thermodynamic equilibrium, stability, or a new quantum law
 Physical validation would require operational definitions of measurable fields,
 preregistered falsifiable predictions distinct from standard theory, measured
 data with uncertainties and controls, and independent replication.
+
+### Big Bounce: evidence and process
+
+Ashtekar, Pawlowski and Singh, [*Quantum Nature of the Big Bang: An Analytical
+and Numerical Investigation*](https://doi.org/10.1103/PhysRevD.73.124038)
+(2006), derive and numerically study a bounce in a **homogeneous, isotropic
+loop quantum cosmology model with a massless scalar field**. That is a result
+under specified theoretical assumptions, not a demonstration that our
+universe underwent a bounce. See also their
+[loop quantum cosmology review](https://doi.org/10.1088/0264-9381/28/21/213001).
+This photon lab does not simulate cosmological evolution, test those papers'
+equations, or establish that the handwritten Lagrangian reduces to either model.
+
+To investigate the notebook hypothesis reproducibly: first supply an exact
+action, definitions, units and conventions for every term; derive its field
+equations and specify a cosmological ansatz and initial conditions; identify a
+testable prediction and an independently reproducible numerical benchmark;
+then compare it with suitable observations, uncertainties and competing
+models. Independent scientific review and replication are needed. Neither
+passing software tests nor producing a simulated bounce alone would establish
+an observed bounce or prove a physical theory.
 
 ## Validate
 

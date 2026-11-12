@@ -86,6 +86,7 @@ test("both notebook sketches are reference only and readable at narrow widths", 
   await expect(section.getByRole("heading", { name: "Gravity and scalar-field sketch" })).toBeVisible();
   await expect(section).toContainText("not evaluated by the simulator");
   await expect(section).toContainText("final matrix contraction are unclear");
+  await expect(section).toContainText("not an observation of our universe");
   await expect(page.locator("#count")).toHaveText("1");
   expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(320);
 });
@@ -105,6 +106,7 @@ test("chart tables and actual CSV download contain all detections", async ({ pag
   const csv = await fs.readFile(await download.path(), "utf8");
   expect(csv).toContain("SIMULATED");
   expect(csv).toContain("photons=1000");
+  expect(csv).toContain("bin_integration=simpson_64");
   const rows = csv.split("\n").filter((row) => !row.startsWith("#"));
   expect(rows).toHaveLength(121);
   expect(rows.slice(1).reduce((sum, row) => sum + Number(row.split(",")[3]), 0)).toBe(1000);

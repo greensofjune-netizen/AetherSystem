@@ -7,6 +7,7 @@
   const WINDOW_SIZE = 128;
   const TRACE_SIZE = 160;
   const RARE_BITS = 8;
+  const INTEGRATION_STEPS = 64;
   const DEFAULTS = Object.freeze({
     wavelengthNm: 550,
     slitSeparationMm: 0.25,
@@ -66,11 +67,20 @@
     const widthMm = 2 * HALF_SCREEN_MM / BINS;
     const positions = Array.from({ length: BINS }, (_, i) =>
       -HALF_SCREEN_MM + (i + 0.5) * widthMm);
-    const weights = positions.map((xMm) => {
+    function intensity(xMm) {
       const x = xMm * 1e-3;
       const beta = Math.PI * slitWidth * x / (wavelength * distance);
       const envelope = beta === 0 ? 1 : (Math.sin(beta) / beta) ** 2;
       return envelope * (1 + visibility * Math.cos(2 * Math.PI * separation * x / (wavelength * distance)));
+    }
+    const weights = positions.map((center) => {
+      const step = widthMm / INTEGRATION_STEPS;
+      const start = center - widthMm / 2;
+      let sum = intensity(start) + intensity(start + widthMm);
+      for (let i = 1; i < INTEGRATION_STEPS; i += 1) {
+        sum += (i % 2 ? 4 : 2) * intensity(start + i * step);
+      }
+      return sum * step / 3;
     });
     const total = weights.reduce((sum, p) => sum + p, 0);
     const probabilities = weights.map((p) => p / total);
@@ -164,7 +174,7 @@
       return [
         "# Quantum Light Lab: SIMULATED data; Math.random, not a quantum entropy source",
         `# wavelength_nm=${s.wavelengthNm},slit_separation_mm=${s.slitSeparationMm},which_path=${s.whichPath}`,
-        "# distance_m=1.5,slit_width_mm=0.04,screen_half_width_mm=15",
+        "# distance_m=1.5,slit_width_mm=0.04,screen_half_width_mm=15,bin_integration=simpson_64",
         `# photons=${this.count},visibility=${this.model.visibility},path_entropy_bits=${this.model.pathEntropy}`,
         "bin,position_mm,expected_probability,observed_count,observed_probability",
         ...this.counts.map((n, i) => [

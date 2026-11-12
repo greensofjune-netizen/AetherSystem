@@ -136,13 +136,13 @@
       <p class="eyebrow">WHAT YOU ARE SEEING</p>
       <h2>Not a wave turning into a little ball.</h2>
       <div class="explanation-grid">
-        <article><span class="step">01</span><h3>Localized detection</h3><p>Light is quantum. Every photon produces a localized detection, even when interference is present. The dots are measurement outcomes, not pictures of photons flying along a path.</p></article>
+        <article><span class="step">01</span><h3>Localized detection</h3><p>Single-photon detections are localized events, even when interference is present. Real detectors have losses; the simulated dots represent detections, not pictures of photons flying along a path.</p></article>
         <article><span class="step">02</span><h3>Wave-like statistics</h3><p>Indistinguishable paths contribute amplitudes that interfere. As many photons arrive, alternating bright and dark fringes emerge. No individual detection needs to trace a wave.</p></article>
         <article><span class="step">03</span><h3>Information changes the pattern</h3><p>Entanglement with a path marker makes paths distinguishable. This ideal balanced-path model uses V = sqrt(1 - D squared). At D = 1, interference disappears, but single-slit diffraction remains.</p></article>
       </div>
       <details class="model-notes">
         <summary>Physics model, entropy definitions &amp; limitations</summary>
-        <p>We use the small-angle, far-field double-slit approximation: I(x) is proportional to sinc squared(pi a x / (lambda L)) times [1 + V cos(2 pi d x / (lambda L))], where sinc(z) = sin(z)/z. The 120 bin-center weights are normalized over this finite screen, then sampled. Sub-bin x positions are uniform. The schematic is not to scale.</p>
+        <p>We use the small-angle, far-field double-slit approximation: I(x) is proportional to sinc squared(pi a x / (lambda L)) times [1 + V cos(2 pi d x / (lambda L))], where sinc(z) = sin(z)/z. We integrate intensity over each of 120 bins using Simpson's rule, then normalize over the finite screen and sample. Sub-bin x positions remain uniform approximations. The schematic is not to scale.</p>
         <p>D represents ideal which-path distinguishability for balanced slits with pure path-marker states, giving V = sqrt(1 - D squared). The reduced path state's eigenvalues are (1 + V)/2 and (1 - V)/2; their von Neumann entropy ranges from 0 to 1 bit. This simplified relation does not cover every noisy or unbalanced experiment.</p>
         <p>Screen Shannon entropy H = -sum p log2 p is a different quantity, dependent on bin size and screen extent. Rolling entropy estimates it from up to 128 samples. Surprisal -log2 P(bin) describes an individual outcome. The 8-bit rare-bin threshold is a visualization convention, not a physical threshold or proof of collapse. None of these charts establishes a wave-to-particle transition.</p>
         <p>Randomness comes from JavaScript Math.random. This is an educational simulation, not a quantum random-number generator, detector, hardware experiment, or cryptographic entropy source. No Aether runtime, network connection, accounts, or external libraries are used. Reloading closes the in-memory run; export the histogram if you want to keep it.</p>
@@ -203,6 +203,8 @@
         <figcaption>The bounce notation and final matrix contraction are unclear in the photograph; R<sub>bounce</sub> is a placeholder reading, and the final term is not transcribed as an exact expression. The notes describe a curvature-squared correction, a bounce contribution, scalar-field dynamics, and a dark-energy balance matrix.</figcaption>
       </figure>
       <p class="muted small">The sketches do not specify the fields, action conventions, dynamics, initial or boundary conditions, or measurable parameters needed for a numerical model. They are hypotheses, not evidence or proof of a Big Bounce, quantum gravity, or the origin of the universe.</p>
+      <h3>Big Bounce: what has been tested?</h3>
+      <p class="muted small">In one published loop quantum cosmology model, a homogeneous isotropic universe with a massless scalar field has a mathematically calculated bounce. This is a result within that model, not an observation of our universe or a validation of these notebook sketches. The photon experiment here does not model cosmology. See the <a href="README.md">verification notes and sources</a> for the evidence and limitations.</p>
     </section>
   </main>
   <footer>QUANTUM LIGHT LAB v0.1.0 <span>Local by design. Curious by nature.</span><a href="README.md">Documentation &amp; verification</a></footer>
