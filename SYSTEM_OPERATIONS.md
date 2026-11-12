@@ -160,6 +160,47 @@ code. See the [API instructions](./README.md#install-and-test) and
    For the optional calculator, follow the Access-before-deploy order in the
    [calculator instructions](./README.md#private-calculator-api).
 
+## Standard operating procedure: test, prove, publish
+
+Use this loop for project changes. "Prove" means collect reproducible evidence
+for the changed behavior, not guarantee flawless operation.
+
+1. **Inspect and scope.** Check the branch, working tree, and diff before
+   editing. Preserve unrelated work. Identify the affected clients, protocols,
+   storage, and documentation; agree on the publication destination.
+2. **Test locally.** Run the smallest tests that cover the change, then the
+   applicable verification checklist below before publishing code. A backend
+   lifecycle or protocol change must include the isolated readiness journey.
+   Documentation-only changes need a diff and link review, not a redundant
+   full local test run.
+3. **Prove the outcome.** Verify the actual requirement, including expected
+   error paths, rather than relying on health responses alone. Use temporary
+   data and bounded processes; stop test servers afterward. For Automator
+   changes, test confirmation, cancellation and failure reporting, then check
+   the real Services action when available. Clearly identify mocked tests,
+   user-reported results, skipped checks and environment limitations.
+4. **Review and publish explicitly.** Inspect the final diff and
+   `git diff --check`, stage only intended files, and review the staged diff.
+   Confirm the remote branch has not advanced before committing and pushing
+   to the agreed branch. Never force-push to bypass a conflict or include
+   private runtime data. Automator runs tests only after confirmation; it
+   does not commit, push, deploy, install dependencies, or certify a release.
+5. **Verify the published commit.** Confirm the remote branch contains the
+   intended commit. Check all four CI jobs for that exact SHA: Python 3.11
+   and 3.14 on macOS and Linux. Do not substitute an earlier green run,
+   a queued run, or local success. Diagnose failures from their logs and
+   repeat the loop; do not remove checks just to turn CI green.
+6. **Report and stop accurately.** Report the commit, destination, CI link,
+   test evidence, manual verification and remaining limitations. If CI or
+   a manual check is unavailable, mark it pending rather than complete.
+   Package uploads, cloud deployment, and desktop distribution are separate
+   actions with their own approvals and verification.
+
+This is the project's contributor workflow, not an automatic publishing
+service or a GitHub branch-protection rule. Code that passes tests can still
+have defects; keep changes bounded and investigate new failures before
+declaring the milestone verified.
+
 ## Verification checklist
 
 From an activated development environment configured as in the

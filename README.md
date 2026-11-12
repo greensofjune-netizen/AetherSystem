@@ -58,6 +58,9 @@ developer snapshots and old build artifacts outside the release branch.
 
 Before publishing:
 
+- Follow the [test, prove, publish procedure](./SYSTEM_OPERATIONS.md#standard-operating-procedure-test-prove-publish),
+  including CI verification for the exact published commit and an explicit
+  report of any checks still pending. Automator does not publish automatically.
 - Review the exact commit, including staged versus unstaged changes, and confirm
   ownership and redistribution terms for all included materials.
 - Keep private databases, exports, telemetry, secrets, installers, and build
