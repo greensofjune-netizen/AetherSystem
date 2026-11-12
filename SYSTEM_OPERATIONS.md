@@ -233,6 +233,9 @@ Its recovery drill creates a backup from temporary tasks and events through
 the API, restores with the CLI into a fresh database, compares every record
 through HTTP, and checks that restoring over existing data without replacement
 is refused without modifying the records or backup.
+Its failure-containment drill verifies the real missing-model HTTP 503,
+unchanged task/event records after invalid requests, and successful task
+creation afterward. Other provider failures and outages need separate checks.
 No live model or real project database is used. Node.js, browser and native
 UI checks remain separate.
 

@@ -263,3 +263,69 @@ def test_backup_recovery_preserves_records_and_refuses_overwrite(tmp_path: Path)
         assert unchanged.json()["tasks"] == expected["tasks"]
         assert unchanged.json()["events"] == expected["events"]
     assert backup_path.read_bytes() == backup_bytes
+
+
+def test_backend_failures_preserve_data_and_allow_subsequent_requests(
+    tmp_path: Path,
+) -> None:
+    with running_backend(tmp_path) as client:
+        created = client.post("/api/v1/tasks", json={"title": "Keep this task"})
+        assert created.status_code == 201, created.text
+        task = created.json()
+        event = client.post(
+            "/api/v1/events", json={"topic": "failure-drill", "message": "Keep history"}
+        )
+        assert event.status_code == 201, event.text
+        exported = client.get("/api/v1/export")
+        assert exported.status_code == 200, exported.text
+        baseline = exported.json()
+
+        unavailable = client.post(
+            "/v1/chat/completions", json={"prompt": "Synthetic readiness prompt"}
+        )
+        assert unavailable.status_code == 503, unavailable.text
+        assert unavailable.json() == {
+            "detail": {
+                "status": "OFFLINE_FALLBACK",
+                "message": "Local model weights are missing; no inference was performed.",
+            }
+        }
+        after_failure = client.get("/api/v1/export")
+        assert after_failure.status_code == 200, after_failure.text
+        assert after_failure.json()["tasks"] == baseline["tasks"]
+        assert after_failure.json()["events"] == baseline["events"]
+
+        invalid_requests = (
+            ("POST", "/api/v1/tasks", {"title": ""}),
+            ("PATCH", f"/api/v1/tasks/{task['id']}", {"priority": "invalid"}),
+            ("POST", "/api/v1/events", {"topic": "failure-drill", "message": ""}),
+            (
+                "POST",
+                "/api/v1/unified/dispatch",
+                {
+                    "protocol_version": "1.0.0",
+                    "source_lang": "python",
+                    "node": "ATLAS",
+                    "event": "invalid-event",
+                    "timestamp": 1.0,
+                    "payload": {},
+                },
+            ),
+            ("POST", "/api/v1/restore", {"backup": {"schema_version": 999}}),
+        )
+        for method, path, body in invalid_requests:
+            rejected = client.request(method, path, json=body)
+            assert rejected.status_code == 422, rejected.text
+            assert rejected.json()["detail"]
+            unchanged = client.get("/api/v1/export")
+            assert unchanged.status_code == 200, unchanged.text
+            assert unchanged.json()["tasks"] == baseline["tasks"], path
+            assert unchanged.json()["events"] == baseline["events"], path
+
+        accepted = client.post("/api/v1/tasks", json={"title": "Works after errors"})
+        assert accepted.status_code == 201, accepted.text
+        final = client.get("/api/v1/export")
+        assert final.status_code == 200, final.text
+        assert final.json()["tasks"] == [*baseline["tasks"], accepted.json()]
+        assert final.json()["events"] == baseline["events"]
+        assert client.get("/health").status_code == 200

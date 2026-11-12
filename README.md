@@ -370,6 +370,10 @@ completed tasks plus events through HTTP, create a backup, restore it with
 the CLI into a fresh database, and compare every task/event field through
 HTTP. It checks that an unconfirmed restore over existing data is rejected
 without changing records or the backup file.
+Its failure drill checks an explicit HTTP 503 for missing model weights,
+unchanged tasks/events after rejected task, event, dispatch and restore
+requests, and a successful valid task request afterward. This tests the
+missing-weights failure path, not every provider or outage scenario.
 It runs in CI too. Run it alone with
 `python -m pytest -q tests/test_backend_readiness.py`.
 Existing Quick Actions invoke the linked source files, so they pick up this
