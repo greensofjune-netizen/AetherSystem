@@ -181,7 +181,7 @@ def run(
             "Run the complete Python project test suite, including isolated "
             "backend readiness (task persistence, dispatch, SSE reconnect/restart, "
             "clean shutdown, backup recovery, damaged-backup rejection, "
-            "and failure containment)? "
+            "failure containment, and concurrent writes/restart)? "
             "No model server is required.",
             confirm=True,
         )

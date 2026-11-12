@@ -241,6 +241,12 @@ preserves the replaced records, and both input files remain unchanged.
 Its failure-containment drill verifies the real missing-model HTTP 503,
 unchanged task/event records after invalid requests, and successful task
 creation afterward. Other provider failures and outages need separate checks.
+The concurrency drill synchronizes eight independent HTTP clients for 24 task
+creations and 24 dispatches. Every write must succeed with a unique ID, match
+the persisted records exactly, and remain intact after a graceful restart.
+Complete ordered SSE replay and latest dispatch state are checked on both
+sides of the restart. This bounded drill is not a throughput benchmark or
+an exactly-once guarantee for retried requests.
 No live model or real project database is used. Node.js, browser and native
 UI checks remain separate.
 

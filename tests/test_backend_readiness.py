@@ -6,8 +6,10 @@ import subprocess
 import sys
 import time
 from collections.abc import Iterator
+from concurrent.futures import ThreadPoolExecutor
 from contextlib import contextmanager
 from pathlib import Path
+from threading import Barrier
 
 import httpx
 import pytest
@@ -196,6 +198,123 @@ def test_backend_readiness_task_dispatch_reconnect_and_restart(tmp_path: Path) -
         replay = read_dispatch(client, first_id)
         assert replay["event_id"] == second_id
         assert replay["envelope"] == envelope
+
+
+def test_concurrent_clients_preserve_every_write_after_restart(tmp_path: Path) -> None:
+    client_count = 8
+    writes_per_client = 3
+    start = Barrier(client_count, timeout=15)
+
+    def write_batch(base_url: str, worker: int) -> tuple[list[dict], list[dict]]:
+        with httpx.Client(base_url=base_url, timeout=10, trust_env=False) as writer:
+            tasks = []
+            dispatches = []
+            start.wait()
+            for sequence in range(writes_per_client):
+                created = writer.post(
+                    "/api/v1/tasks",
+                    json={
+                        "title": f"Concurrent task {worker}-{sequence}",
+                        "description": f"Client {worker}, write {sequence}",
+                        "priority": "high" if worker % 2 else "low",
+                    },
+                )
+                assert created.status_code == 201, created.text
+                task = created.json()
+                assert task["title"] == f"Concurrent task {worker}-{sequence}"
+                assert task["description"] == f"Client {worker}, write {sequence}"
+                assert task["priority"] == ("high" if worker % 2 else "low")
+                tasks.append(task)
+            start.wait()
+            for sequence in range(writes_per_client):
+                envelope = {
+                    "protocol_version": "1.0.0",
+                    "source_lang": "python",
+                    "node": "ATLAS",
+                    "event": "CONCURRENCY_TEST",
+                    "timestamp": float(worker * writes_per_client + sequence),
+                    "payload": {"client": worker, "sequence": sequence},
+                }
+                dispatched = writer.post("/api/v1/unified/dispatch", json=envelope)
+                assert dispatched.status_code == 200, dispatched.text
+                assert dispatched.json()["status"] == "ACCEPTED"
+                assert dispatched.json()["persisted"] is True
+                dispatches.append(
+                    {"event_id": dispatched.json()["event_id"], "envelope": envelope}
+                )
+            return tasks, dispatches
+
+    def verify_records(client: httpx.Client) -> dict:
+        exported = client.get("/api/v1/export")
+        assert exported.status_code == 200, exported.text
+        snapshot = exported.json()
+        assert snapshot["tasks"] == expected_tasks
+        assert len(snapshot["events"]) == client_count * writes_per_client
+        assert len({event["id"] for event in snapshot["events"]}) == len(dispatches)
+        expected_replay = []
+        for event in snapshot["events"]:
+            assert event["topic"] == "unified-dispatch"
+            assert json.loads(event["message"]) == dispatches[event["id"]]
+            expected_replay.append(
+                {
+                    "event_id": event["id"],
+                    "created_at": event["created_at"],
+                    "envelope": dispatches[event["id"]],
+                }
+            )
+        with client.stream(
+            "GET", "/api/v1/unified/stream", headers={"Last-Event-ID": "0"}
+        ) as response:
+            events = stream_events(response)
+            for record in expected_replay:
+                replayed = next(events)
+                assert replayed["event"] == "dispatch"
+                assert int(replayed["id"]) == record["event_id"]
+                assert json.loads(replayed["data"]) == record
+        state = client.get("/api/v1/unified/state")
+        assert state.status_code == 200, state.text
+        assert state.json()["last_dispatch"] == expected_replay[-1]
+        return snapshot
+
+    with running_backend(tmp_path) as client:
+        with ThreadPoolExecutor(max_workers=client_count) as executor:
+            futures = [
+                executor.submit(write_batch, str(client.base_url), worker)
+                for worker in range(client_count)
+            ]
+            batches = [future.result(timeout=30) for future in futures]
+        expected_tasks = sorted(
+            (task for tasks, _ in batches for task in tasks),
+            key=lambda task: task["id"],
+        )
+        expected_count = client_count * writes_per_client
+        assert len(expected_tasks) == expected_count
+        assert len({task["id"] for task in expected_tasks}) == expected_count
+        assert {task["title"] for task in expected_tasks} == {
+            f"Concurrent task {worker}-{sequence}"
+            for worker in range(client_count)
+            for sequence in range(writes_per_client)
+        }
+        dispatches = {
+            record["event_id"]: record["envelope"]
+            for _, records in batches
+            for record in records
+        }
+        assert len(dispatches) == expected_count
+        assert {
+            (envelope["payload"]["client"], envelope["payload"]["sequence"])
+            for envelope in dispatches.values()
+        } == {
+            (worker, sequence)
+            for worker in range(client_count)
+            for sequence in range(writes_per_client)
+        }
+        before_restart = verify_records(client)
+
+    with running_backend(tmp_path) as client:
+        after_restart = verify_records(client)
+        assert after_restart["tasks"] == before_restart["tasks"]
+        assert after_restart["events"] == before_restart["events"]
 
 
 def test_backup_recovery_preserves_records_and_refuses_overwrite(tmp_path: Path) -> None:

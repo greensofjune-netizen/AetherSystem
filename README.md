@@ -379,6 +379,11 @@ Its failure drill checks an explicit HTTP 503 for missing model weights,
 unchanged tasks/events after rejected task, event, dispatch and restore
 requests, and a successful valid task request afterward. This tests the
 missing-weights failure path, not every provider or outage scenario.
+Its concurrency drill synchronizes eight independent HTTP clients, creating
+24 tasks and 24 dispatches. It verifies unique acknowledged IDs, exact stored
+records, complete ordered SSE replay and latest dispatch state before and
+after a graceful backend restart. This is a bounded correctness check, not a
+load benchmark or a guarantee of exactly-once delivery after client retries.
 It runs in CI too. Run it alone with
 `python -m pytest -q tests/test_backend_readiness.py`.
 Existing Quick Actions invoke the linked source files, so they pick up this
