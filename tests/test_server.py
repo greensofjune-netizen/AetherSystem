@@ -138,8 +138,71 @@ def test_unified_dispatch_rejects_non_loopback_and_invalid_envelopes(
             "/api/v1/unified/dispatch",
             json=oversized_payload,
         ).status_code
-        == 422
+        == 413
     )
+
+
+def test_unified_dispatch_limits_streamed_request_body() -> None:
+    async def chunks():
+        yield b" " * 20_000
+        yield b" " * 12_769
+
+    async def send_request() -> httpx.Response:
+        transport = httpx.ASGITransport(app=server.app)
+        async with httpx.AsyncClient(
+            transport=transport,
+            base_url="http://test",
+        ) as client:
+            return await client.post("/api/v1/unified/dispatch", content=chunks())
+
+    response = asyncio.run(send_request())
+
+    assert response.status_code == 413
+    assert response.json() == {
+        "detail": "Request body must be no larger than 32768 bytes."
+    }
+
+
+def test_unified_dispatch_accepts_exact_wire_limit(monkeypatch, tmp_path) -> None:
+    monkeypatch.setenv("AETHER_DATABASE_PATH", str(tmp_path / "dispatch.sqlite3"))
+    envelope = {
+        "protocol_version": "1.0.0",
+        "source_lang": "python",
+        "node": "ATLAS",
+        "event": "BOUNDARY_TEST",
+        "timestamp": 1.0,
+        "payload": {},
+    }
+    encoded = json.dumps(envelope, separators=(",", ":")).encode()
+    body = encoded + b" " * (server.UNIFIED_PAYLOAD_LIMIT_BYTES - len(encoded))
+
+    async def chunks():
+        yield body[:100]
+        yield b""
+        yield body[100:]
+
+    async def send_request() -> httpx.Response:
+        transport = httpx.ASGITransport(
+            app=server.app, client=("127.0.0.1", 12345)
+        )
+        async with httpx.AsyncClient(
+            transport=transport, base_url="http://test"
+        ) as client:
+            return await client.post(
+                "/api/v1/unified/dispatch",
+                headers={"Content-Type": "application/json"},
+                content=chunks(),
+            )
+
+    response = asyncio.run(send_request())
+    assert response.status_code == 200
+    assert response.json()["persisted"] is True
+    assert _request(
+        "POST",
+        "/api/v1/unified/dispatch",
+        headers={"Content-Type": "application/json"},
+        content=body + b" ",
+    ).status_code == 413
 
 
 def test_remote_access_requires_shared_token_and_allows_loopback(

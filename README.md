@@ -787,6 +787,8 @@ so EventSource can resume from its last event ID.
 Dispatch accepts only the seven declared source languages and four node names,
 uppercase event identifiers, finite non-negative timestamps, and JSON payloads
 with at most 64 top-level fields. The complete envelope is limited to 32 KiB.
+The HTTP endpoint also caps the incoming request body at 32 KiB and returns
+`413` when that wire-size limit is exceeded, before parsing the envelope.
 Requests are limited to 120 per minute per client host in each API process.
 For remote access, configure `AETHER_API_TOKEN` and send it in the
 `X-Aether-Token` header; the check uses constant-time comparison. Loopback

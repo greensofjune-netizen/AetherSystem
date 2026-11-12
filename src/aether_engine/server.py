@@ -23,6 +23,7 @@ from fastapi import FastAPI, Header, HTTPException, Query, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, JSONResponse, StreamingResponse
 from pydantic import BaseModel, ConfigDict, Field, model_validator
+from starlette.types import ASGIApp, Message, Receive, Scope, Send
 
 from . import live_sync_supervisor
 from .ai_bridge import LocalAirGappedEngine
@@ -72,6 +73,55 @@ UNIFIED_EVENT_REPLAY_LIMIT = 500
 UNIFIED_DISPATCH_RATE_LIMIT = 120
 UNIFIED_DISPATCH_RATE_WINDOW_SECONDS = 60.0
 
+
+class UnifiedDispatchBodyLimitMiddleware:
+    def __init__(self, app: ASGIApp, max_bytes: int) -> None:
+        self.app = app
+        self.max_bytes = max_bytes
+
+    async def __call__(self, scope: Scope, receive: Receive, send: Send) -> None:
+        if (
+            scope["type"] != "http"
+            or scope["method"] != "POST"
+            or scope["path"] != "/api/v1/unified/dispatch"
+        ):
+            await self.app(scope, receive, send)
+            return
+
+        body = bytearray()
+        while True:
+            message = await receive()
+            if message["type"] == "http.disconnect":
+                return
+            chunk = message.get("body", b"")
+            if len(body) + len(chunk) > self.max_bytes:
+                response = JSONResponse(
+                    status_code=413,
+                    content={
+                        "detail": (
+                            "Request body must be no larger than "
+                            f"{self.max_bytes} bytes."
+                        )
+                    },
+                )
+                await response(scope, receive, send)
+                return
+            body.extend(chunk)
+            if not message.get("more_body", False):
+                break
+
+        replayed = False
+
+        async def replay_receive() -> Message:
+            nonlocal replayed
+            if not replayed:
+                replayed = True
+                return {"type": "http.request", "body": bytes(body), "more_body": False}
+            return await receive()
+
+        await self.app(scope, replay_receive, send)
+
+
 app = FastAPI(
     title="Aether Engine API",
     description=(
@@ -80,6 +130,10 @@ app = FastAPI(
     version="1.0.0",
 )
 app.state.local_model_status = {"model": DEFAULT_LOCAL_MODEL, "status": "pending"}
+app.add_middleware(
+    UnifiedDispatchBodyLimitMiddleware,
+    max_bytes=UNIFIED_PAYLOAD_LIMIT_BYTES,
+)
 
 allowed_origins = [
     origin.strip()
