@@ -265,6 +265,127 @@ def test_backup_recovery_preserves_records_and_refuses_overwrite(tmp_path: Path)
     assert backup_path.read_bytes() == backup_bytes
 
 
+@pytest.mark.parametrize("surface", ["http", "cli"])
+@pytest.mark.parametrize("damage", ["truncated-json", "invalid-event"])
+def test_damaged_backup_rejection_and_subsequent_recovery(
+    tmp_path: Path, surface: str, damage: str,
+) -> None:
+    with running_backend(tmp_path) as client:
+        task = client.post(
+            "/api/v1/tasks",
+            json={"title": "Recover this task", "priority": "high"},
+        )
+        assert task.status_code == 201, task.text
+        for message in ("First saved event", "Last saved event"):
+            event = client.post(
+                "/api/v1/events", json={"topic": "damaged-backup", "message": message}
+            )
+            assert event.status_code == 201, event.text
+        backup = client.post("/api/v1/backups", json={})
+        assert backup.status_code == 201, backup.text
+        backup_path = Path(backup.json()["path"])
+        backup_bytes = backup_path.read_bytes()
+        expected = json.loads(backup_bytes)
+
+        updated = client.patch(
+            f"/api/v1/tasks/{task.json()['id']}",
+            json={"title": "Keep current data until a valid restore"},
+        )
+        assert updated.status_code == 200, updated.text
+        added = client.post(
+            "/api/v1/events",
+            json={"topic": "damaged-backup", "message": "Not present in the backup"},
+        )
+        assert added.status_code == 201, added.text
+        exported = client.get("/api/v1/export")
+        assert exported.status_code == 200, exported.text
+        baseline = exported.json()
+
+        damaged = json.loads(backup_bytes)
+        if damage == "truncated-json":
+            damaged_bytes = backup_bytes.rstrip()[:-1]
+        else:
+            damaged["events"][-1]["created_at"] = "not-a-timestamp"
+            damaged_bytes = json.dumps(damaged).encode("utf-8")
+        damaged_path = tmp_path / "damaged-backup.json"
+        damaged_path.write_bytes(damaged_bytes)
+
+        for valid in (False, True):
+            if surface == "http":
+                content = (
+                    b'{"replace": true, "backup": '
+                    + (backup_bytes if valid else damaged_bytes)
+                    + b"}"
+                )
+                response = client.post(
+                    "/api/v1/restore",
+                    content=content,
+                    headers={"Content-Type": "application/json"},
+                )
+                assert response.status_code == (200 if valid else 422), response.text
+                if valid:
+                    assert response.json()["tasks_restored"] == len(expected["tasks"])
+                    assert response.json()["events_restored"] == len(expected["events"])
+                    safety_path = Path(response.json()["safety_backup"])
+                elif damage == "truncated-json":
+                    assert response.json()["detail"][0]["type"] == "json_invalid"
+                else:
+                    assert response.json()["detail"] == (
+                        "Backup event at index 1 has an invalid created_at."
+                    )
+            else:
+                result = subprocess.run(
+                    [
+                        sys.executable, "-m", "aether_engine",
+                        "--database", str(tmp_path / "readiness.sqlite3"),
+                        "restore", str(backup_path if valid else damaged_path),
+                        "--replace",
+                    ],
+                    cwd=tmp_path,
+                    env={**os.environ, "PYTHONPATH": str(ROOT / "src")},
+                    capture_output=True,
+                    text=True,
+                    timeout=10,
+                )
+                assert result.returncode == (0 if valid else 1), (
+                    result.stdout + result.stderr
+                )
+                if valid:
+                    assert "Restored 1 task(s) and 2 event(s)" in result.stdout
+                else:
+                    assert "error:" in result.stderr
+                    assert "Restored" not in result.stdout
+                    if damage == "truncated-json":
+                        assert "Expecting ',' delimiter" in result.stderr
+                    else:
+                        assert (
+                            "Backup event at index 1 has an invalid created_at."
+                            in result.stderr
+                        )
+
+            recovered = client.get("/api/v1/export")
+            assert recovered.status_code == 200, recovered.text
+            records = expected if valid else baseline
+            assert recovered.json()["tasks"] == records["tasks"]
+            assert recovered.json()["events"] == records["events"]
+            snapshots = sorted(backup_path.parent.glob("aether-backup-*.json"))
+            assert len(snapshots) == (2 if valid else 1)
+            if valid:
+                if surface == "cli":
+                    safety_path = next(path for path in snapshots if path != backup_path)
+                safety = json.loads(safety_path.read_bytes())
+                assert safety["tasks"] == baseline["tasks"]
+                assert safety["events"] == baseline["events"]
+            assert backup_path.read_bytes() == backup_bytes
+            assert damaged_path.read_bytes() == damaged_bytes
+
+    with running_backend(tmp_path) as client:
+        persisted = client.get("/api/v1/export")
+        assert persisted.status_code == 200, persisted.text
+        assert persisted.json()["tasks"] == expected["tasks"]
+        assert persisted.json()["events"] == expected["events"]
+
+
 def test_backend_failures_preserve_data_and_allow_subsequent_requests(
     tmp_path: Path,
 ) -> None:

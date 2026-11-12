@@ -180,7 +180,8 @@ def run(
         dialog(
             "Run the complete Python project test suite, including isolated "
             "backend readiness (task persistence, dispatch, SSE reconnect/restart, "
-            "clean shutdown, backup recovery, and failure containment)? "
+            "clean shutdown, backup recovery, damaged-backup rejection, "
+            "and failure containment)? "
             "No model server is required.",
             confirm=True,
         )

@@ -370,6 +370,11 @@ completed tasks plus events through HTTP, create a backup, restore it with
 the CLI into a fresh database, and compare every task/event field through
 HTTP. It checks that an unconfirmed restore over existing data is rejected
 without changing records or the backup file.
+Through both HTTP and CLI restore with replacement enabled, it rejects
+truncated JSON and an invalid event timestamp without changing existing
+records or creating a safety backup. A valid restore afterward recovers every
+saved task/event field, preserves the replaced records in a safety backup,
+and survives a backend restart. Both input backup files remain unchanged.
 Its failure drill checks an explicit HTTP 503 for missing model weights,
 unchanged tasks/events after rejected task, event, dispatch and restore
 requests, and a successful valid task request afterward. This tests the
