@@ -2,6 +2,7 @@
 
 import json
 import os
+import signal
 import subprocess
 import sys
 import time
@@ -42,7 +43,9 @@ with socket.socket() as listener:
 
 
 @contextmanager
-def running_backend(directory: Path) -> Iterator[httpx.Client]:
+def running_backend(
+    directory: Path, *, abrupt_stop: bool = False,
+) -> Iterator[httpx.Client]:
     port_file = directory / "port.txt"
     port_file.unlink(missing_ok=True)
     environment = {
@@ -65,6 +68,7 @@ def running_backend(directory: Path) -> Iterator[httpx.Client]:
             stderr=log,
             text=True,
         )
+        killed = False
         try:
             deadline = time.monotonic() + 20
             with httpx.Client(timeout=2, trust_env=False) as client:
@@ -85,16 +89,22 @@ def running_backend(directory: Path) -> Iterator[httpx.Client]:
                 else:
                     pytest.fail(f"Backend did not become ready:\n{log_path.read_text()}")
                 yield client
+                if abrupt_stop:
+                    assert process.poll() is None, log_path.read_text()
+                    process.kill()
+                    killed = True
         finally:
             try:
                 process.communicate(
-                    input="stop\n" if process.poll() is None else None, timeout=10
+                    input="stop\n" if not killed and process.poll() is None else None,
+                    timeout=10,
                 )
             except subprocess.TimeoutExpired:
                 process.kill()
                 process.wait(timeout=5)
                 pytest.fail(f"Backend did not stop gracefully:\n{log_path.read_text()}")
-            assert process.returncode == 0, log_path.read_text()
+            expected_exit = (-signal.SIGKILL if os.name == "posix" else 1) if killed else 0
+            assert process.returncode == expected_exit, log_path.read_text()
 
 
 def stream_events(response: httpx.Response) -> Iterator[dict[str, str]]:
@@ -198,6 +208,76 @@ def test_backend_readiness_task_dispatch_reconnect_and_restart(tmp_path: Path) -
         replay = read_dispatch(client, first_id)
         assert replay["event_id"] == second_id
         assert replay["envelope"] == envelope
+
+
+def test_acknowledged_writes_survive_abrupt_backend_stop(tmp_path: Path) -> None:
+    tasks = []
+    dispatches = []
+    with running_backend(tmp_path, abrupt_stop=True) as client:
+        for sequence in range(3):
+            created = client.post(
+                "/api/v1/tasks",
+                json={"title": f"Crash recovery task {sequence}", "priority": "high"},
+            )
+            assert created.status_code == 201, created.text
+            tasks.append(created.json())
+            envelope = {
+                "protocol_version": "1.0.0",
+                "source_lang": "python",
+                "node": "ATLAS",
+                "event": "CRASH_RECOVERY_TEST",
+                "timestamp": float(sequence),
+                "payload": {"sequence": sequence, "task_id": tasks[-1]["id"]},
+            }
+            dispatched = client.post("/api/v1/unified/dispatch", json=envelope)
+            assert dispatched.status_code == 200, dispatched.text
+            assert dispatched.json()["status"] == "ACCEPTED"
+            assert dispatched.json()["persisted"] is True
+            dispatches.append(
+                {"event_id": dispatched.json()["event_id"], "envelope": envelope}
+            )
+
+    with running_backend(tmp_path) as client:
+        exported = client.get("/api/v1/export")
+        assert exported.status_code == 200, exported.text
+        recovered = exported.json()
+        assert recovered["tasks"] == tasks
+        assert len({task["id"] for task in tasks}) == 3
+        assert len(recovered["events"]) == len(dispatches) == 3
+        assert len({record["event_id"] for record in dispatches}) == 3
+        expected_replay = []
+        for event, acknowledged in zip(recovered["events"], dispatches, strict=True):
+            assert event["topic"] == "unified-dispatch"
+            assert event["id"] == acknowledged["event_id"]
+            assert json.loads(event["message"]) == acknowledged["envelope"]
+            expected_replay.append(
+                {
+                    "event_id": event["id"],
+                    "created_at": event["created_at"],
+                    "envelope": acknowledged["envelope"],
+                }
+            )
+        with client.stream(
+            "GET", "/api/v1/unified/stream", headers={"Last-Event-ID": "0"}
+        ) as response:
+            replay = stream_events(response)
+            for record in expected_replay:
+                received = next(replay)
+                assert received["event"] == "dispatch"
+                assert int(received["id"]) == record["event_id"]
+                assert json.loads(received["data"]) == record
+        state = client.get("/api/v1/unified/state")
+        assert state.status_code == 200, state.text
+        assert state.json()["last_dispatch"] == expected_replay[-1]
+        subsequent = client.post(
+            "/api/v1/tasks", json={"title": "Writable after crash recovery"}
+        )
+        assert subsequent.status_code == 201, subsequent.text
+        assert subsequent.json()["id"] > max(task["id"] for task in tasks)
+        final = client.get("/api/v1/export")
+        assert final.status_code == 200, final.text
+        assert final.json()["tasks"] == [*tasks, subsequent.json()]
+        assert final.json()["events"] == recovered["events"]
 
 
 def test_concurrent_clients_preserve_every_write_after_restart(tmp_path: Path) -> None:

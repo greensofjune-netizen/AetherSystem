@@ -247,6 +247,12 @@ the persisted records exactly, and remain intact after a graceful restart.
 Complete ordered SSE replay and latest dispatch state are checked on both
 sides of the restart. This bounded drill is not a throughput benchmark or
 an exactly-once guarantee for retried requests.
+The crash-recovery drill acknowledges three tasks and three dispatches, then
+forcibly kills only its own temporary backend process (SIGKILL on macOS/Linux).
+It waits for process exit before restarting against the same temporary
+database, verifies every acknowledged record, ordered SSE replay and latest
+dispatch state, and confirms a new write succeeds. This does not simulate
+power loss or disk failure, or assert outcomes for unacknowledged requests.
 No live model or real project database is used. Node.js, browser and native
 UI checks remain separate.
 

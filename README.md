@@ -384,6 +384,12 @@ Its concurrency drill synchronizes eight independent HTTP clients, creating
 records, complete ordered SSE replay and latest dispatch state before and
 after a graceful backend restart. This is a bounded correctness check, not a
 load benchmark or a guarantee of exactly-once delivery after client retries.
+Its crash-recovery drill waits for acknowledgements for three tasks and three
+dispatches, forcibly kills only the temporary backend process without graceful
+shutdown, then restarts against the same temporary database. It verifies all
+acknowledged records, ordered SSE replay, latest dispatch state and a new
+successful write. This tests process termination, not power loss, disk failure
+or the fate of requests that were not acknowledged.
 It runs in CI too. Run it alone with
 `python -m pytest -q tests/test_backend_readiness.py`.
 Existing Quick Actions invoke the linked source files, so they pick up this
