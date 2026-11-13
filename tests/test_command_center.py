@@ -3,6 +3,7 @@ from __future__ import annotations
 import asyncio
 import importlib.util
 import json
+import shutil
 from pathlib import Path
 from threading import Thread
 from urllib.error import HTTPError
@@ -241,9 +242,17 @@ def test_dashboard_shows_latest_matrix_arts_telemetry(matrix, tmp_path, monkeypa
         ("/stargazer.js", "text/javascript", b"CONSTELLATIONS"),
     ],
 )
+@pytest.mark.parametrize("installed", [False, True])
 def test_frontend_assets_are_served_without_reading_private_telemetry(
-    matrix, path, content_type, marker
+    matrix, path, content_type, marker, installed, tmp_path, monkeypatch
 ):
+    if installed:
+        source = Path(matrix.__file__).resolve().parent / "frontend"
+        prefix = tmp_path / "installed"
+        destination = prefix / "share" / "aether-engine" / "observatory"
+        shutil.copytree(source, destination)
+        monkeypatch.setattr(matrix, "__file__", str(prefix / "site" / "aether_master_matrix.py"))
+        monkeypatch.setattr(matrix.sys, "prefix", str(prefix))
     matrix.LOG_FILE.write_text("{invalid", encoding="utf-8")
     server = matrix.LocalThreadingHTTPServer(
         ("127.0.0.1", 0), matrix.HistorianLiveServer

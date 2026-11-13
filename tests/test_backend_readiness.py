@@ -211,7 +211,79 @@ def test_backend_readiness_task_dispatch_reconnect_and_restart(tmp_path: Path) -
         assert replay["envelope"] == envelope
 
 
-def test_monitor_task_creation_restart_and_outage_recovery(tmp_path: Path) -> None:
+def test_mobile_app_manifest_layout_and_network_only_storage(tmp_path: Path) -> None:
+    from playwright.sync_api import expect, sync_playwright
+
+    with running_backend(tmp_path) as client:
+        with sync_playwright() as playwright, playwright.chromium.launch() as browser:
+            context = browser.new_context(**playwright.devices["Pixel 7"])
+            page = context.new_page()
+            errors = []
+            policy_violations = []
+            page.on("pageerror", lambda error: errors.append(str(error)))
+            page.expose_function("recordPolicyViolation", lambda value: policy_violations.append(value))
+            page.add_init_script("""
+                document.addEventListener('securitypolicyviolation', event => {
+                    window.recordPolicyViolation(event.violatedDirective);
+                });
+            """)
+            page.goto(f"{client.base_url}/tasks")
+            expect(page.get_by_role("heading", name="Aether Tasks", exact=True)).to_be_visible()
+            expect(page.locator("#task-connection")).to_contain_text("connected.")
+            assert page.evaluate("window.isSecureContext") is True
+            cdp = context.new_cdp_session(page)
+            cdp.send("Page.enable")
+            manifest_result = cdp.send("Page.getAppManifest")
+            assert manifest_result["errors"] == [], manifest_result
+            manifest = json.loads(manifest_result["data"])
+            assert manifest["id"] == manifest["start_url"] == "/tasks"
+            assert manifest["scope"] == "/tasks"
+            assert manifest["display"] == "standalone"
+            assert manifest["prefer_related_applications"] is False
+            assert {icon["sizes"] for icon in manifest["icons"]} == {"192x192", "512x512"}
+            for icon in manifest["icons"]:
+                response = client.get(icon["src"])
+                assert response.status_code == 200, response.text
+                assert response.headers["content-type"] == "image/png"
+                assert response.content[:8] == b"\x89PNG\r\n\x1a\n"
+                width = int.from_bytes(response.content[16:20], "big")
+                height = int.from_bytes(response.content[20:24], "big")
+                assert f"{width}x{height}" == icon["sizes"]
+            for width in (320, 390):
+                page.set_viewport_size({"width": width, "height": 844})
+                assert page.evaluate(
+                    "document.documentElement.scrollWidth <= window.innerWidth"
+                ), f"Horizontal overflow at {width}px"
+            creation = page.get_by_label("Task title (required)", exact=True)
+            creation.fill("Phone-layout smoke task")
+            page.get_by_role("button", name="Add task", exact=True).click()
+            expect(page.locator("#task-list li")).to_have_count(1)
+            creation.fill("Private unsaved mobile draft")
+            assert page.evaluate("localStorage.length") == 0
+            assert page.evaluate("sessionStorage.length") == 0
+            assert page.evaluate("caches.keys()") == []
+            assert page.evaluate(
+                "navigator.serviceWorker.getRegistrations().then(items => items.length)"
+            ) == 0
+            context.set_offline(True)
+            page.get_by_role("button", name="Refresh tasks", exact=True).click()
+            expect(page.locator("#task-connection")).to_contain_text("unavailable")
+            expect(page.locator("#task-list li")).to_have_count(1)
+            expect(creation).to_have_value("Private unsaved mobile draft")
+            context.set_offline(False)
+            page.get_by_role("button", name="Refresh tasks", exact=True).click()
+            expect(page.locator("#task-connection")).to_contain_text("connected.")
+            assert len(client.get("/api/v1/tasks").json()) == 1
+            expect(creation).to_have_value("Private unsaved mobile draft")
+            page.reload()
+            expect(creation).to_have_value("")
+            assert errors == []
+            assert policy_violations == []
+            context.close()
+
+
+@pytest.mark.parametrize("app_path", ["/monitor", "/tasks"])
+def test_monitor_task_creation_restart_and_outage_recovery(tmp_path: Path, app_path: str) -> None:
     from playwright.sync_api import expect, sync_playwright
 
     with sync_playwright() as playwright, playwright.chromium.launch() as browser:
@@ -228,7 +300,7 @@ def test_monitor_task_creation_restart_and_outage_recovery(tmp_path: Path) -> No
         with running_backend(tmp_path) as client:
             port = client.base_url.port
             assert port is not None
-            page.goto(f"{client.base_url}/monitor")
+            page.goto(f"{client.base_url}{app_path}")
             expect(page.locator("#task-connection")).to_contain_text("connected.")
             title = page.get_by_label("Task title (required)")
             title.fill("Browser-created persistent task")
@@ -289,7 +361,8 @@ def test_monitor_task_creation_restart_and_outage_recovery(tmp_path: Path) -> No
         page.close()
 
 
-def test_monitor_task_status_lifecycle_and_outage_recovery(tmp_path: Path) -> None:
+@pytest.mark.parametrize("app_path", ["/monitor", "/tasks"])
+def test_monitor_task_status_lifecycle_and_outage_recovery(tmp_path: Path, app_path: str) -> None:
     from playwright.sync_api import expect, sync_playwright
 
     with sync_playwright() as playwright, playwright.chromium.launch() as browser:
@@ -304,7 +377,7 @@ def test_monitor_task_status_lifecycle_and_outage_recovery(tmp_path: Path) -> No
         with running_backend(tmp_path) as client:
             port = client.base_url.port
             assert port is not None
-            page.goto(f"{client.base_url}/monitor")
+            page.goto(f"{client.base_url}{app_path}")
             page.get_by_label("Task title (required)").fill("Lifecycle task")
             page.get_by_role("button", name="Add task", exact=True).click()
             expect(page.locator("#task-list li")).to_have_count(1)
@@ -528,7 +601,8 @@ def test_concurrent_unrelated_fields_merge_and_invalid_guards_fail(tmp_path: Pat
         assert cleared.json()["due_date"] is None
 
 
-def test_monitor_two_editors_conflict_review_and_recovery(tmp_path: Path) -> None:
+@pytest.mark.parametrize("app_path", ["/monitor", "/tasks"])
+def test_monitor_two_editors_conflict_review_and_recovery(tmp_path: Path, app_path: str) -> None:
     from playwright.sync_api import expect, sync_playwright
 
     with sync_playwright() as playwright, playwright.chromium.launch() as browser:
@@ -546,7 +620,7 @@ def test_monitor_two_editors_conflict_review_and_recovery(tmp_path: Path) -> Non
             task_id = original["id"]
             path = f"/api/v1/tasks/{task_id}"
             for page in (first, second):
-                page.goto(f"{client.base_url}/monitor")
+                page.goto(f"{client.base_url}{app_path}")
                 page.get_by_role("button", name=f"Edit task #{task_id}", exact=True).click()
             first.get_by_label("Edit title (required)", exact=True).fill("First editor wins")
             second.get_by_label("Edit title (required)", exact=True).fill("Second editor draft")
@@ -619,7 +693,8 @@ def test_monitor_two_editors_conflict_review_and_recovery(tmp_path: Path) -> Non
         second.close()
 
 
-def test_monitor_task_details_editing_and_restart(tmp_path: Path) -> None:
+@pytest.mark.parametrize("app_path", ["/monitor", "/tasks"])
+def test_monitor_task_details_editing_and_restart(tmp_path: Path, app_path: str) -> None:
     from playwright.sync_api import expect, sync_playwright
 
     with sync_playwright() as playwright, playwright.chromium.launch() as browser:
@@ -644,7 +719,7 @@ def test_monitor_task_details_editing_and_restart(tmp_path: Path) -> None:
             response = client.post(f"/api/v1/tasks/{task_id}/complete")
             assert response.status_code == 200, response.text
             original = response.json()
-            page.goto(f"{client.base_url}/monitor")
+            page.goto(f"{client.base_url}{app_path}")
             row = page.locator(f'[data-task-id="{task_id}"]')
             expect(row).to_contain_text("Original description")
             expect(row).to_contain_text("Priority: low. Due date: 2027-01-02.")
@@ -788,7 +863,8 @@ def test_monitor_task_details_editing_and_restart(tmp_path: Path) -> None:
         page.close()
 
 
-def test_monitor_edit_draft_outage_and_lost_acknowledgement(tmp_path: Path) -> None:
+@pytest.mark.parametrize("app_path", ["/monitor", "/tasks"])
+def test_monitor_edit_draft_outage_and_lost_acknowledgement(tmp_path: Path, app_path: str) -> None:
     from playwright.sync_api import expect, sync_playwright
 
     with sync_playwright() as playwright, playwright.chromium.launch() as browser:
@@ -805,7 +881,7 @@ def test_monitor_edit_draft_outage_and_lost_acknowledgement(tmp_path: Path) -> N
             assert response.status_code == 201, response.text
             original = response.json()
             task_id = original["id"]
-            page.goto(f"{client.base_url}/monitor")
+            page.goto(f"{client.base_url}{app_path}")
             row = page.locator(f'[data-task-id="{task_id}"]')
             page.get_by_role("button", name=f"Edit task #{task_id}", exact=True).click()
             title = page.get_by_label("Edit title (required)", exact=True)
@@ -881,7 +957,8 @@ def test_monitor_edit_draft_outage_and_lost_acknowledgement(tmp_path: Path) -> N
         page.close()
 
 
-def test_monitor_filters_search_drafts_and_outage_recovery(tmp_path: Path) -> None:
+@pytest.mark.parametrize("app_path", ["/monitor", "/tasks"])
+def test_monitor_filters_search_drafts_and_outage_recovery(tmp_path: Path, app_path: str) -> None:
     from playwright.sync_api import expect, sync_playwright
 
     with sync_playwright() as playwright, playwright.chromium.launch() as browser:
@@ -905,7 +982,7 @@ def test_monitor_filters_search_drafts_and_outage_recovery(tmp_path: Path) -> No
             assert completed.status_code == 200, completed.text
             baseline = client.get("/api/v1/export")
             assert baseline.status_code == 200, baseline.text
-            page.goto(f"{client.base_url}/monitor")
+            page.goto(f"{client.base_url}{app_path}")
             rows = page.locator("#task-list li")
             expect(rows).to_have_count(4)
             draft = page.get_by_label("Task title (required)")
@@ -1026,7 +1103,8 @@ def test_monitor_filters_search_drafts_and_outage_recovery(tmp_path: Path) -> No
         page.close()
 
 
-def test_monitor_filter_change_ignores_outdated_response(tmp_path: Path) -> None:
+@pytest.mark.parametrize("app_path", ["/monitor", "/tasks"])
+def test_monitor_filter_change_ignores_outdated_response(tmp_path: Path, app_path: str) -> None:
     from playwright.sync_api import expect, sync_playwright
 
     with running_backend(tmp_path) as client:
@@ -1038,7 +1116,7 @@ def test_monitor_filter_change_ignores_outdated_response(tmp_path: Path) -> None
         assert done.status_code == 200, done.text
         with sync_playwright() as playwright, playwright.chromium.launch() as browser:
             page = browser.new_page()
-            page.goto(f"{client.base_url}/monitor")
+            page.goto(f"{client.base_url}{app_path}")
             expect(page.locator("#task-list li")).to_have_count(2)
             held = []
             page.route("**/api/v1/tasks?search=Alpha", lambda route: held.append(route), times=1)

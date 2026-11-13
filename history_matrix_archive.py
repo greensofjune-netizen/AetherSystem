@@ -13,7 +13,12 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Iterator
 
-DEFAULT_ARCHIVE_PATH = Path(__file__).resolve().with_name("universal_history.sqlite3")
+DEFAULT_ARCHIVE_PATH = Path(
+    os.environ.get(
+        "AETHER_HISTORY_ARCHIVE",
+        str(Path(__file__).resolve().with_name("universal_history.sqlite3")),
+    )
+).expanduser()
 
 
 @dataclass

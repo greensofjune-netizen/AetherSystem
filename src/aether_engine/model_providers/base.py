@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from math import isfinite
-from typing import Literal, Protocol
+from typing import Any, Literal, Protocol
 
 
 @dataclass(frozen=True)
@@ -21,6 +21,30 @@ class ProviderMessage:
 
 
 @dataclass(frozen=True)
+class ChatTool:
+    name: str
+    description: str
+    parameters: dict[str, Any]
+
+    def __post_init__(self) -> None:
+        if (
+            not isinstance(self.name, str)
+            or not self.name.strip()
+            or not isinstance(self.description, str)
+            or not self.description.strip()
+        ):
+            raise ValueError("Chat tools require a name and description.")
+        if not isinstance(self.parameters, dict):
+            raise TypeError("Chat tool parameters must be a JSON object schema.")
+
+
+@dataclass(frozen=True)
+class ToolCall:
+    name: str
+    arguments: dict[str, Any]
+
+
+@dataclass(frozen=True)
 class ChatRequest:
     model: str
     messages: tuple[ProviderMessage, ...]
@@ -29,6 +53,7 @@ class ChatRequest:
     reasoning_effort: Literal[
         "none", "low", "medium", "high", "xhigh", "max"
     ] | None = None
+    tools: tuple[ChatTool, ...] = ()
 
     def __post_init__(self) -> None:
         if not isinstance(self.model, str) or not self.model.strip():
@@ -52,6 +77,8 @@ class ChatRequest:
             "max",
         }:
             raise ValueError("Model reasoning effort is not supported.")
+        if len({tool.name for tool in self.tools}) != len(self.tools):
+            raise ValueError("Chat tool names must be unique.")
 
 
 @dataclass(frozen=True)
@@ -60,6 +87,7 @@ class ChatResult:
     content: str
     prompt_tokens: int | None = None
     completion_tokens: int | None = None
+    tool_calls: tuple[ToolCall, ...] = ()
 
 
 @dataclass(frozen=True)

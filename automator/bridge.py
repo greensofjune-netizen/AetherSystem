@@ -187,6 +187,7 @@ def run(
             "They also cover filters/search and draft retention. "
             "Task details/editing checks include validation, restart and uncertain-save recovery. "
             "Concurrent-edit conflict checks include atomic races and explicit review. "
+            "The mobile task web preview runs the same journeys plus manifest/layout checks. "
             "Requires Playwright and its Chromium browser, and includes a real "
             "60-second rate window. No model server is required.",
             confirm=True,

@@ -12,6 +12,7 @@
   const maxTotalImageBytes = 6000000;
   const encoder = new TextEncoder();
   const state = { conversation: null, conversations: [], attachments: [], images: [], visionModels: new Set(), messageImageUrls: [], busy: false, reading: false, loadingChat: false, loadVersion: 0, modelStatusPolls: 0, voiceUnsupported: false, controller: null, stopped: false, dictating: false, desktop: false };
+  let weatherContext = null;
   const elements = {
     list: $('conversation-list'), title: $('chat-title'), messages: $('messages'), model: $('model'),
     form: $('chat-form'), message: $('message'), send: $('send'), files: $('files'), attachments: $('attachments'),
@@ -22,6 +23,24 @@
     newChat: $('new-chat'), refresh: $('refresh'), stop: $('stop-response'),
     retry: $('retry'), progress: $('chat-progress'), nativeVoice: $('native-voice-input')
   };
+  if ($('include-weather')) {
+    $('weather-frame').addEventListener('load', () => {
+      weatherContext = null;
+      $('weather-context-status').textContent = 'Waiting for the Weather tab reading.';
+      $('weather-frame').contentWindow.postMessage(
+        { type: 'matrix-weather-context-request' }, window.location.origin
+      );
+    });
+    window.addEventListener('message', (event) => {
+      if (event.origin !== window.location.origin ||
+          event.source !== $('weather-frame').contentWindow ||
+          event.data?.type !== 'matrix-weather-context' ||
+          !event.data.weather || typeof event.data.weather !== 'object') return;
+      weatherContext = event.data.weather;
+      $('weather-context-status').textContent =
+        `Weather reading available (${weatherContext.freshness === 'live' ? 'live' : 'stale'}).`;
+    });
+  }
 
   function showError(element, message) {
     element.textContent = message || '';
@@ -210,7 +229,8 @@
       bubble.className = 'bubble';
       const label = document.createElement('span');
       label.className = 'message-label';
-      label.textContent = message.role === 'user' ? 'YOU' : document.title.toUpperCase();
+      label.textContent = message.role === 'user' ? 'YOU' :
+        ($('include-weather') ? 'COPERNICUS' : document.title.toUpperCase());
       const text = document.createElement('div');
       text.className = 'message-text';
       text.textContent = message.content;
@@ -613,6 +633,10 @@
       showError(elements.error, 'Messages must be 8,000 characters or fewer.');
       return;
     }
+    if ($('include-weather')?.checked && !weatherContext) {
+      showError(elements.error, 'Open Weather and wait for a reading before including it.');
+      return;
+    }
     state.busy = true;
     state.stopped = false;
     elements.retry.hidden = true;
@@ -633,6 +657,7 @@
           message,
           model,
           ...($('include-history') ? { include_history: $('include-history').checked } : {}),
+          ...($('include-weather')?.checked ? { weather_context: weatherContext } : {}),
           attachments: state.attachments.map(({ name, content }) => ({ name, content })),
           images: state.images.map(({ name, media_type, data }) => ({ name, media_type, data })),
         }

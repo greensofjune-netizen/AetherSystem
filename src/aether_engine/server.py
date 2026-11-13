@@ -7,6 +7,7 @@ import json
 import logging
 import math
 import os
+import secrets
 import sqlite3
 import sys
 import time
@@ -21,7 +22,12 @@ from typing import Annotated, Any, Literal, NoReturn
 import uvicorn
 from fastapi import FastAPI, Header, HTTPException, Query, Request
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import FileResponse, JSONResponse, StreamingResponse
+from fastapi.responses import (
+    FileResponse,
+    HTMLResponse,
+    JSONResponse,
+    StreamingResponse,
+)
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 from starlette.types import ASGIApp, Message, Receive, Scope, Send
 
@@ -176,6 +182,15 @@ SOURCE_MONITOR_PATH = SOURCE_CLIENT_PATH.with_name("index.html")
 INSTALLED_MONITOR_PATH = INSTALLED_CLIENT_PATH.with_name("index.html")
 SOURCE_TASKS_PATH = SOURCE_CLIENT_PATH.with_name("monitor_tasks.js")
 INSTALLED_TASKS_PATH = INSTALLED_CLIENT_PATH.with_name("monitor_tasks.js")
+SOURCE_TASK_APP_PATH = SOURCE_CLIENT_PATH.parent / "tasks"
+INSTALLED_TASK_APP_PATH = INSTALLED_CLIENT_PATH.parent / "tasks"
+TASK_APP_ASSETS = {
+    "tasks.css": "text/css",
+    "manifest.webmanifest": "application/manifest+json",
+    "icon.svg": "image/svg+xml",
+    "icon-192.png": "image/png",
+    "icon-512.png": "image/png",
+}
 
 
 class StrictRequest(BaseModel):
@@ -375,12 +390,20 @@ async def authorize_remote_clients(request: Request, call_next: Any) -> Any:
     try:
         authorize_aether_client(request)
     except HTTPException as error:
-        return JSONResponse(
+        response = JSONResponse(
             status_code=error.status_code,
             content={"detail": error.detail},
             headers=error.headers,
         )
-    return await call_next(request)
+    else:
+        response = await call_next(request)
+    if (
+        request.url.path == "/tasks"
+        or request.url.path.startswith(("/tasks/", "/api/v1/tasks"))
+    ):
+        response.headers["Cache-Control"] = "private, no-store"
+        response.headers["X-Content-Type-Options"] = "nosniff"
+    return response
 
 
 install_request_telemetry(app, "aether-api")
@@ -466,6 +489,43 @@ def serve_monitor_tasks() -> FileResponse:
         if path.is_file():
             return FileResponse(path, media_type="application/javascript")
     raise HTTPException(status_code=404, detail="Monitor task script not found.")
+
+
+def task_app_file(name: str, media_type: str) -> FileResponse:
+    for directory in (SOURCE_TASK_APP_PATH, INSTALLED_TASK_APP_PATH):
+        path = directory / name
+        if path.is_file():
+            return FileResponse(path, media_type=media_type)
+    raise HTTPException(status_code=404, detail="Task app asset not found.")
+
+
+@app.get("/tasks", include_in_schema=False)
+@app.get("/tasks/", include_in_schema=False)
+def serve_task_app() -> HTMLResponse:
+    asset = task_app_file("index.html", "text/html")
+    nonce = secrets.token_urlsafe(24)
+    html = Path(asset.path).read_text(encoding="utf-8").replace(
+        "{{TASK_SCRIPT_NONCE}}", nonce
+    )
+    return HTMLResponse(html, headers={
+        "Content-Security-Policy": (
+            f"default-src 'none'; script-src 'nonce-{nonce}' 'strict-dynamic' 'report-sample'; style-src 'self'; "
+            "connect-src 'self'; img-src 'self'; manifest-src 'self'; "
+            "object-src 'none'; base-uri 'none'; frame-ancestors 'none'; "
+            "form-action 'self'; require-trusted-types-for 'script'"
+        ),
+        "X-Frame-Options": "DENY",
+        "Referrer-Policy": "no-referrer",
+        "Permissions-Policy": "camera=(), microphone=(), geolocation=()",
+    })
+
+
+@app.get("/tasks/{asset}", include_in_schema=False)
+def serve_task_app_asset(asset: str) -> FileResponse:
+    media_type = TASK_APP_ASSETS.get(asset)
+    if media_type is None:
+        raise HTTPException(status_code=404, detail="Task app asset not found.")
+    return task_app_file(asset, media_type)
 
 
 @app.post("/v1/chat/completions", response_model=ChatCompletionResponse)

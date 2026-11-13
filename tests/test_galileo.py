@@ -622,6 +622,38 @@ def test_desktop_server_starts_and_closes_listener(tmp_path):
         assert probe.connect_ex(("127.0.0.1", server.port)) != 0
 
 
+@pytest.mark.parametrize(
+    ("aristotle", "model_args", "expected_model"),
+    [
+        (False, [], "qwen3.5:4b"),
+        (False, ["--model", "custom-model"], "custom-model"),
+        (True, [], "qwen3.5:4b"),
+    ],
+)
+def test_desktop_model_default_and_override(
+    tmp_path, monkeypatch, aristotle, model_args, expected_model
+):
+    import sys
+
+    from aether_engine import galileo_desktop
+
+    (tmp_path / "galileo.log").touch()
+    server = Mock()
+    desktop_server = Mock(return_value=server)
+    monkeypatch.setattr(galileo_desktop, "DesktopServer", desktop_server)
+    monkeypatch.setattr(galileo_desktop, "run_desktop", Mock())
+    monkeypatch.setattr(galileo_desktop.importlib, "import_module", Mock())
+    monkeypatch.setattr(galileo_desktop.logging, "basicConfig", Mock())
+    monkeypatch.setattr(
+        sys, "argv", ["galileo", "--data-directory", str(tmp_path), *model_args]
+    )
+
+    assert galileo_desktop.main(project_directory=tmp_path, aristotle=aristotle) == 0
+    desktop_server.assert_called_once_with(
+        tmp_path, expected_model, aristotle_project=tmp_path if aristotle else None
+    )
+
+
 def test_desktop_window_failure_still_stops_backend():
     server = Mock()
     webview = Mock()

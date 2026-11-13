@@ -1,0 +1,17 @@
+{
+  "id": "/tasks",
+  "name": "Aether Tasks",
+  "short_name": "Aether Tasks",
+  "description": "Private task tracking with explicit save and conflict feedback. Requires a connection to your Aether backend.",
+  "lang": "en",
+  "start_url": "/tasks",
+  "scope": "/tasks",
+  "display": "standalone",
+  "background_color": "#0f141c",
+  "theme_color": "#0f141c",
+  "prefer_related_applications": false,
+  "icons": [
+    {"src": "/tasks/icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any"},
+    {"src": "/tasks/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any maskable"}
+  ]
+}

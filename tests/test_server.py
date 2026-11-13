@@ -12,6 +12,63 @@ from starlette.requests import Request
 from aether_engine import server
 
 
+def test_mobile_task_app_assets_and_private_cache_policy(tmp_path, monkeypatch):
+    source = server.SOURCE_TASK_APP_PATH
+    installed = tmp_path / "tasks"
+    installed.mkdir()
+    assets = {"index.html": "text/html", **server.TASK_APP_ASSETS}
+
+    def content_matches(response, expected):
+        if response.headers["content-type"].startswith("text/html"):
+            nonce = response.headers["content-security-policy"].split("'nonce-", 1)[1].split("'", 1)[0]
+            assert len(nonce) >= 32
+            expected = expected.replace(b"{{TASK_SCRIPT_NONCE}}", nonce.encode())
+        assert response.content == expected
+
+    for asset, media_type in assets.items():
+        expected = (source / asset).read_bytes()
+        (installed / asset).write_bytes(expected)
+        route = "/tasks" if asset == "index.html" else f"/tasks/{asset}"
+        response = _request("GET", route)
+        assert response.status_code == 200
+        content_matches(response, expected)
+        assert response.headers["content-type"].startswith(media_type)
+        assert response.headers["cache-control"] == "private, no-store"
+        assert response.headers["x-content-type-options"] == "nosniff"
+    page = _request("GET", "/tasks")
+    assert page.headers["x-frame-options"] == "DENY"
+    assert page.headers["referrer-policy"] == "no-referrer"
+    assert "require-trusted-types-for 'script'" in page.headers["content-security-policy"]
+    assert "unsafe-inline" not in page.headers["content-security-policy"]
+    slash_page = _request("GET", "/tasks/")
+    content_matches(slash_page, (source / "index.html").read_bytes())
+    assert slash_page.headers["content-security-policy"] != page.headers["content-security-policy"]
+    monkeypatch.setattr(server, "SOURCE_TASK_APP_PATH", tmp_path / "missing-source")
+    monkeypatch.setattr(server, "INSTALLED_TASK_APP_PATH", installed)
+    for asset in assets:
+        route = "/tasks" if asset == "index.html" else f"/tasks/{asset}"
+        content_matches(_request("GET", route), (installed / asset).read_bytes())
+    monkeypatch.setattr(server, "INSTALLED_TASK_APP_PATH", tmp_path / "missing-installed")
+    for asset in assets:
+        route = "/tasks" if asset == "index.html" else f"/tasks/{asset}"
+        assert _request("GET", route).status_code == 404
+    assert _request("GET", "/tasks/unknown.js").status_code == 404
+    for route in ("/tasks", "/tasks/manifest.webmanifest", "/api/v1/tasks"):
+        denied = _request("GET", route, client_address=("203.0.113.1", 12345))
+        assert denied.status_code == 401
+        assert denied.headers["cache-control"] == "private, no-store"
+    monkeypatch.setenv("AETHER_DATABASE_PATH", str(tmp_path / "tasks.sqlite3"))
+    for method, route, payload, expected_status in (
+        ("GET", "/api/v1/tasks", None, 200),
+        ("POST", "/api/v1/tasks", {"title": "Private task"}, 201),
+        ("PATCH", "/api/v1/tasks/99999", {"title": "Missing"}, 404),
+        ("POST", "/api/v1/tasks", {"title": ""}, 422),
+    ):
+        response = _request(method, route, **({"json": payload} if payload else {}))
+        assert response.status_code == expected_status, response.text
+        assert response.headers["cache-control"] == "private, no-store"
+
+
 def test_monitor_assets_source_installed_and_missing(tmp_path, monkeypatch):
     for route, source_name, installed_name, content_type in (
         ("/monitor", "SOURCE_MONITOR_PATH", "INSTALLED_MONITOR_PATH", "text/html"),

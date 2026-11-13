@@ -1,0 +1,101 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="theme-color" content="#0f141c">
+    <meta name="description" content="Private Aether task tracking. Requires a connection to your backend.">
+    <title>Aether Tasks</title>
+    <link rel="manifest" href="/tasks/manifest.webmanifest" crossorigin="use-credentials">
+    <link rel="icon" href="/tasks/icon.svg" type="image/svg+xml">
+    <link rel="stylesheet" href="/tasks/tasks.css">
+    <script src="/monitor_tasks.js" nonce="{{TASK_SCRIPT_NONCE}}" defer></script>
+</head>
+<body>
+<main>
+    <h1>Aether Tasks</h1>
+    <p>Mobile web preview. This is not a Google Play release.</p>
+    <details>
+        <summary>Install and connection help</summary>
+        <p>On Android, open your approved HTTPS app address in Chrome, sign in, then use
+            the browser menu to Install app or Add to Home screen, if offered.
+            A localhost preview works only on this computer, not on your phone.</p>
+        <p>A connection to your private backend is required. There is no offline task cache
+            or background save queue. Unsaved drafts remain only in the open page and are
+            lost on reload or closing the app. A failed save may have reached the server;
+            check the list before trying again.</p>
+    </details>
+    <section class="card" id="task-panel" aria-labelledby="task-heading">
+        <h2 id="task-heading">Project tasks</h2>
+        <p id="task-help">Tasks are stored by this Aether API. The list refreshes every five seconds.
+            Failed saves and status updates are never retried automatically.</p>
+        <p id="task-connection" role="status">Connecting to task backend...</p>
+        <p id="task-notice" role="status"></p>
+        <p id="task-error" role="alert"></p>
+        <form id="task-filters" action="/api/v1/tasks" method="get" aria-describedby="task-filter-help">
+            <fieldset id="task-filter-fields" disabled>
+                <legend>Filter project tasks</legend>
+                <div class="task-status-options">
+                    <label for="task-status-all"><input id="task-status-all" type="radio" name="status" value="" checked>All</label>
+                    <label for="task-status-pending"><input id="task-status-pending" type="radio" name="status" value="pending">Pending</label>
+                    <label for="task-status-done"><input id="task-status-done" type="radio" name="status" value="done">Done</label>
+                </div>
+                <label for="task-search">Search tasks</label>
+                <input id="task-search" name="search" type="search" maxlength="500" spellcheck="false" autocapitalize="off" autocorrect="off">
+                <p id="task-filter-help">Search titles and descriptions. Choose a status and press Apply filters
+                    (or Enter in search). Clear search and choose All to show every task.</p>
+                <button type="submit">Apply filters</button>
+            </fieldset>
+        </form>
+        <form id="task-form" action="/api/v1/tasks" method="post" aria-describedby="task-help">
+            <fieldset id="task-fields" disabled>
+                <legend>Create a project task</legend>
+                <label for="task-title">Task title (required)</label>
+                <input id="task-title" name="title" required maxlength="500">
+                <button type="submit" id="task-save">Add task</button>
+            </fieldset>
+        </form>
+        <noscript>Task controls require JavaScript. Use the CLI or API instead.</noscript>
+        <button type="button" class="secondary" id="task-refresh">Refresh tasks</button>
+        <p id="task-empty" role="status" hidden>No tasks match the applied filters.</p>
+        <ul id="task-list" aria-label="Project tasks"></ul>
+        <form id="task-editor" action="/api/v1/tasks" method="post" aria-describedby="task-edit-help" hidden>
+            <fieldset id="task-edit-fields" disabled>
+                <legend id="task-edit-heading">Edit task</legend>
+                <p id="task-edit-help">Editing a snapshot of the displayed task. Refreshes update the list, not this draft.
+                    Save or cancel before editing another task. Only changed fields are saved.
+                    If those fields changed elsewhere, the save is rejected without writing.
+                    After an uncertain save, compare the refreshed list before retrying.
+                    Cancel editing discards this edit draft; reload discards all unsaved drafts.</p>
+                <label for="task-edit-title">Edit title (required)</label>
+                <input id="task-edit-title" name="title" required maxlength="500">
+                <label for="task-edit-description">Edit description</label>
+                <textarea id="task-edit-description" name="description" rows="5" maxlength="8000"></textarea>
+                <fieldset>
+                    <legend>Edit priority</legend>
+                    <div class="task-status-options">
+                        <label for="task-priority-low"><input id="task-priority-low" type="radio" name="priority" value="low">Low</label>
+                        <label for="task-priority-normal"><input id="task-priority-normal" type="radio" name="priority" value="normal">Normal</label>
+                        <label for="task-priority-high"><input id="task-priority-high" type="radio" name="priority" value="high">High</label>
+                    </div>
+                </fieldset>
+                <label for="task-edit-due">Edit due date (optional)</label>
+                <input id="task-edit-due" name="due_date" type="date">
+                <p>Leave the date empty to remove an existing due date.</p>
+                <section id="task-edit-conflict" aria-labelledby="task-conflict-heading" hidden>
+                    <h3 id="task-conflict-heading">Review conflicting changes</h3>
+                    <p>Your draft is retained. These are the latest values returned with the conflict;
+                        they may change again. Cancel to discard your draft, or explicitly keep it against
+                        these reviewed values, then Save changes to overwrite conflicting fields.
+                        Unchanged draft fields will adopt the reviewed values. Nothing is saved by reviewing.</p>
+                    <pre id="task-conflict-values"></pre>
+                    <button type="button" id="task-conflict-review">Keep draft against reviewed values</button>
+                </section>
+                <button type="submit" id="task-edit-save">Save changes</button>
+                <button type="button" class="secondary" id="task-edit-cancel">Cancel editing</button>
+            </fieldset>
+        </form>
+    </section>
+</main>
+</body>
+</html>

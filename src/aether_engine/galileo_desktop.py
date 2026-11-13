@@ -25,8 +25,6 @@ from aether_engine.galileo import (
 )
 from automator import bridge
 
-ATLAS_MODEL = bridge.MODEL
-
 
 class DesktopActions:
     """Expose only voice and manually confirmed, allowlisted Matrix actions."""
@@ -175,7 +173,7 @@ def run_desktop(
 def main(*, project_directory: Path | None = None, aristotle: bool = False) -> int:
     app_name = "Matrix Aristotle" if aristotle else "Galileo"
     parser = argparse.ArgumentParser(description=f"{app_name} local desktop companion.")
-    parser.add_argument("--model", default=ATLAS_MODEL)
+    parser.add_argument("--model", default=DEFAULT_MODEL)
     parser.add_argument(
         "--project-directory",
         type=Path,

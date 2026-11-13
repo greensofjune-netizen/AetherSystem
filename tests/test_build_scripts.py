@@ -4,9 +4,10 @@ import pytest
 
 import build_app
 import build_galileo
+import build_master_matrix
 
 
-@pytest.mark.parametrize("script", [build_app, build_galileo])
+@pytest.mark.parametrize("script", [build_app, build_galileo, build_master_matrix])
 def test_build_script_help_does_not_start_build(script, monkeypatch, capsys):
     monkeypatch.setattr(sys, "argv", [script.__file__, "--help"])
 
@@ -29,6 +30,17 @@ def test_galileo_build_does_not_overwrite_existing_app(tmp_path, monkeypatch, ca
     assert marker.read_text() == "existing"
     assert "Refusing to overwrite" in capsys.readouterr().err
 
+
+def test_master_build_does_not_overwrite_existing_app(tmp_path, monkeypatch, capsys):
+    existing = tmp_path / "Aether Master Matrix.app"
+    existing.mkdir()
+    marker = existing / "keep"
+    marker.write_text("existing")
+    monkeypatch.setattr(sys, "argv", ["build_master_matrix.py", "--output-dir", str(tmp_path)])
+    monkeypatch.setattr(sys, "platform", "darwin")
+    assert build_master_matrix.main() == 1
+    assert marker.read_text() == "existing"
+    assert "Refusing to overwrite" in capsys.readouterr().err
 
 def test_aristotle_build_help_names_app(monkeypatch, capsys):
     monkeypatch.setattr(sys, "argv", ["build_aristotle.py", "--help"])

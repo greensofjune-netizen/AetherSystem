@@ -1,9 +1,11 @@
 from aether_engine.model_providers import (
     ChatRequest,
+    ChatTool,
     LocalEngineProvider,
     ModelInfo,
     OllamaProvider,
     ProviderMessage,
+    ToolCall,
 )
 
 
@@ -52,6 +54,55 @@ def test_ollama_chat_uses_typed_request_and_returns_usage(monkeypatch):
     assert response.model == "qwen-local"
     assert response.prompt_tokens == 8
     assert response.completion_tokens == 4
+
+
+def test_ollama_chat_parses_tool_calls_without_executing_them(monkeypatch):
+    provider = OllamaProvider()
+    captured = {}
+    tool = ChatTool(
+        "propose_matrix_test_drive",
+        "Propose a confirmed simulation.",
+        {"type": "object", "properties": {}, "additionalProperties": False},
+    )
+
+    def request(path, payload=None):
+        captured["payload"] = payload
+        return {
+            "model": "qwen-local",
+            "message": {
+                "content": "",
+                "tool_calls": [
+                    {
+                        "function": {
+                            "name": tool.name,
+                            "arguments": {},
+                        }
+                    }
+                ],
+            },
+        }
+
+    monkeypatch.setattr(provider, "request", request)
+    response = provider.chat(
+        ChatRequest(
+            "qwen-local",
+            (ProviderMessage("user", "Run a simulated test drive."),),
+            tools=(tool,),
+        )
+    )
+
+    assert captured["payload"]["tools"] == [
+        {
+            "type": "function",
+            "function": {
+                "name": tool.name,
+                "description": tool.description,
+                "parameters": tool.parameters,
+            },
+        }
+    ]
+    assert response.content == ""
+    assert response.tool_calls == (ToolCall(tool.name, {}),)
 
 
 def test_ollama_list_models_returns_typed_capabilities_and_health(monkeypatch):

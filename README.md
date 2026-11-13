@@ -95,7 +95,9 @@ for the physics model, limitations, controls, and tests.
 Matrix Aristotle unifies Galileo's persistent chat and multimodal controls,
 Copernicus weather and astronomy, Historian archive search, and Matrix
 simulation/Automator views in one macOS window with the same ember-and-gold
-design. It reuses Galileo's existing conversation directory and does not migrate
+design. Copernicus is the primary chat copilot for the Matrix agent in this
+desktop; it is not a second independently acting agent. It reuses Galileo's
+existing conversation directory and does not migrate
 or combine the separate historical archive, Matrix telemetry, or Copernicus
 browser-session chats.
 
@@ -117,9 +119,8 @@ in-app project picker. Public distribution still requires a Developer ID
 Application identity, hardened-runtime signing, Apple notarization and
 verification on another Mac.
 
-Ollama must be
-running; the default Atlas coder model is text-only, so select a vision model
-for images. To run from source use
+Ollama must be running; the default model is `qwen3.5:4b`. Select an installed
+vision-capable model for images. To run from source use
 `.venv/bin/python -m aether_engine.aristotle_desktop`; the native dictation
 helper is compiled automatically in the app bundle, and source runs need a
 compiled `src/aether_engine/galileo-voice`.
@@ -131,11 +132,36 @@ you check the archive option for that message. The Matrix view reads simulated
 telemetry from `historian_telemetry_vault.json` (or
 `AETHER_HISTORIAN_LOG_FILE`) and has its own in-process simulated governor;
 it does not control the separate dashboard's governor or enforce hardware
-limits. Tests and backups still require explicit native confirmation. The
+limits. Copernicus's local Ollama chat receives a fresh, read-only snapshot of
+the latest simulated telemetry and illustrative agent-memory estimates on each
+turn. Its conversational agent can explain that context and suggest next steps,
+and can request a read-only Matrix snapshot, calculate visible bright stars for
+explicit coordinates, or, when the history checkbox is selected, search the
+existing local archive. Open the Weather tab to load an Open-Meteo reading and
+select the weather checkbox to include it in a message; the city, conditions,
+observation time and live/stale status are sent to local Ollama only for that
+message. The Weather tab sends the selected city or coordinates to Open-Meteo;
+the chat does not initiate a separate network weather request. A missing reading
+is reported instead of fabricated. At most two validated read-only
+tool calls are executed in one turn; their results are treated as untrusted
+data. Model-generated text is not executed. Chat cannot propose or run Matrix
+actions. The model must support structured tool calls for this feature; models
+that only imitate tool calls in text cannot use the tools, and even capable
+models may skip an explicit tool request. Responses show the context supplied
+and, separately, any tools actually executed. Project tests and
+backups still require their separate native confirmation. The
 linked project defaults to the build project's path and can be overridden with
 `AETHER_PROJECT_PATH` or `--project-directory`. Weather uses Open-Meteo and
-requires network access; voice input requires on-device macOS speech support
+requires network access. Astronomy may download public Skyfield catalog and
+ephemeris files to the per-user cache on first use; the calculation uses the
+coordinates supplied to the tool. Voice input requires on-device macOS speech support
 and microphone/speech permission.
+
+To compare the four configured smaller local models using disposable synthetic data, run
+`AETHER_EVAL_MATRIX_MODELS=1 .venv/bin/python -m pytest tests/test_matrix_agent_models.py -q -s`.
+The evaluation exercises snapshot and opted-in history tool calls and verifies
+that a test-drive request does not alter the synthetic telemetry. A failure
+identifies an unmet scenario, not a general assessment of a model's abilities.
 
 ## Matrix agent governor
 
@@ -197,11 +223,10 @@ The build refuses to overwrite an existing `Galileo.app` in its output directory
 choose another output directory for later builds. Without `--output-dir` it
 uses `dist`.
 Ollama must already be running on `127.0.0.1:11434`; Galileo preloads the
-already-installed `atlas-qwen-coder:latest` text model when the app starts and never pulls a
-model or sends chat to a cloud provider. Register the GGUF from
-`/Volumes/Atlas/models` with Ollama once. Select an installed
-vision model such as `qwen3.5:4b` for images. The model and preload state are shown in the chat
-interface; another installed model can be selected in the app.
+already-installed `qwen3.5:4b` model when the app starts and never pulls a
+model or sends chat to a cloud provider. Install that model in Ollama separately.
+It supports images as well as text. The model and preload state are shown in the
+chat interface; another installed model can be selected in the app.
 Start from source with
 `python -m aether_engine.galileo_desktop`, or use `--browser` for a development
 preview. `--model NAME` selects the initial model. Source runs require the
@@ -601,6 +626,85 @@ guards for nonempty edits. Complete/Reopen retain their existing semantics.
 The `v0.2.0` Git tag marks the preceding verified monitor/recovery checkpoint;
 it is not a package upload or deployment.
 
+### Mobile task app preview and Android release gates
+
+Open `/tasks` on the main Aether API for **Aether Tasks**, a focused mobile web
+interface sharing the monitor's task controller and API. It supports creation,
+status changes, filters, editing and conflict review without the optional dashboard
+widgets. It includes a web app manifest, 192/512 PNG icons and standalone display
+metadata. Android Chrome can offer installation from its menu on a suitable HTTPS
+origin; an automatic install prompt, Android package or Play approval is not promised.
+The source SVG is the icon master; render it at 192 and 512 square pixels when
+changing the PNGs.
+
+The app is **network-only**: it registers no service worker, stores no tasks or
+drafts in browser storage, and queues no background writes. Task responses and app
+assets use `Cache-Control: private, no-store`. Rows retained in the open page during
+an outage are labeled stale; all unsaved drafts disappear on reload or closing the
+page. The mobile page uses external styles/scripts, a fresh script nonce, CSP,
+Trusted Types enforcement and no-frame headers. These browser defenses are not
+a replacement for a private deployment's authentication and origin isolation.
+
+For a local preview using a **new disposable database**, not your project records:
+
+```bash
+preview_dir="$(mktemp -d /tmp/aether-mobile-preview.XXXXXX)"
+AETHER_DATABASE_PATH="$preview_dir/preview.sqlite3" \
+  .venv/bin/python -m uvicorn aether_engine.server:app --host 127.0.0.1 --port 8789
+```
+
+Open `http://127.0.0.1:8789/tasks` on the same computer. Stop the server with Ctrl+C.
+Loopback is a browser secure-context exception; that address is **not reachable
+from an Android phone**. Do not bind the full API publicly or put its shared token
+in the app, URL, manifest or Android package. All admitted private users currently
+share one task database; there is no per-user isolation.
+
+The proposed phone-trial hostname is `tasks.aetherengineapi.com.co`; it has **not**
+been provisioned by this preparation. The existing Cloudflare website/calculator
+Worker is separate and does not host this Python/SQLite backend. An ordinary
+Workers static-assets deployment does not preserve the current server's local
+SQLite filesystem or its desktop/model processes.
+
+Remaining release steps, requiring separate approvals and account setup:
+
+1. Reauthorize the Cloudflare connection; choose an always-on backend host and
+   approve costs. Use persistent SQLite storage, backups and a single writer
+   deployment. A tunnel to a sleeping Mac is only a temporary trial.
+2. Configure Cloudflare Access with an explicit allow policy **before** exposing
+   the hostname. Restrict the origin to the protected connector/proxy and allow
+   only the task UI and necessary task operations, not restore, inference or
+   administrative APIs. Test unauthorized access, sign-in/session expiry,
+   cross-site writes and direct-origin bypass before admitting private records.
+   Do not rely on the current loopback trust when forwarding proxy traffic.
+3. Test the HTTPS app on the actual Android phone, including install/uninstall,
+   sign-in, drafts, conflicts, outages and restart persistence. The automated Pixel
+   emulation is not a physical-phone test.
+4. Create and verify a Google Play developer account yourself, including any fee
+   and legal agreements. Choose the app/package identity before signing.
+5. Build a Trusted Web Activity Android App Bundle with maintained Android tooling
+   (for example Bubblewrap), using the then-current Play target API requirements.
+   Keep signing material outside Git. Configure Digital Asset Links with the real
+   Play App Signing certificate fingerprint. Verification must be able to fetch
+   `/.well-known/assetlinks.json` without an Access login; exempt only that public
+   metadata path, never task data. Validate the private sign-in flow in the wrapper.
+6. Supply truthful privacy policy, Data safety declarations, store listing,
+   screenshots, content rating and reviewer access. Start with internal testing.
+   For personal accounts subject to Google's newer-account requirements, production
+   access requires at least 12 closed-test participants opted in continuously for
+   14 days and a production-access application. Google review controls availability.
+
+Official references: [Trusted Web Activities](https://developer.chrome.com/docs/android/trusted-web-activity),
+[Chrome install criteria](https://developer.chrome.com/blog/update-install-criteria),
+[Google Play testing requirements](https://support.google.com/googleplay/android-developer/answer/14151465),
+and [Cloudflare Tunnel](https://developers.cloudflare.com/cloudflare-one/networks/connectors/cloudflare-tunnel/).
+
+Dependency preparation raised the FastAPI minimum to 0.162.5 and tested that patch.
+The local optional symbolic-math stack retains mpmath 1.3.0 because installed
+SymPy 1.14.0 requires mpmath `<1.4`; forcing 1.4.1 breaks dependency consistency.
+Do not install the unrelated PyPI `aether-engine` release over this editable project.
+The lab's declared axe/Playwright versions are retained; a registry `latest`
+label lower than an installed version is not a reason to downgrade.
+
 ### Local Workspace record bridge
 
 `workspace_matrix_bridge.py` sanitizes caller-supplied Google Workspace-style
@@ -842,6 +946,49 @@ aether-master-matrix --test-drive
 aether-master-matrix --test-drive --steps 10 --interval 0
 ```
 
+### Master Matrix Mac app: local release candidate
+
+The separate native **Aether Master Matrix.app** wraps this dashboard, not
+Galileo or the mobile task monitor. Install `.[desktop,build]` in the build
+environment, then use a **new output directory**:
+
+```bash
+python build_master_matrix.py --output-dir dist/master-matrix-local-rc
+"dist/master-matrix-local-rc/Aether Master Matrix.app/Contents/MacOS/Aether Master Matrix" \
+  --smoke-test --data-directory /path/to/empty-desktop-test-directory
+```
+
+The builder refuses to replace an existing app. Open the resulting app in
+Finder for the native window. Source development can instead run
+`python -m aether_engine.master_desktop`; the installed entry point is
+`aether-master-desktop` after reinstalling the editable package.
+The listener uses an operating-system-selected port on `127.0.0.1`, is checked
+before the window opens, and shuts down when the window closes.
+No privileged JavaScript bridge, launch agent or public listener is added.
+
+The default private data directory is
+`~/Library/Application Support/AetherSystem/MasterMatrix/`.
+`--data-directory` selects an isolated alternative. Before importing dashboard
+engines, the launcher explicitly selects `tasks.sqlite3`, `history.sqlite3`,
+`propulsion.sqlite3` and `simulated-telemetry.json` there, overriding inherited
+archive/database settings. It never imports existing project records.
+Diagnostics are written to `desktop.log` in that directory. The standalone
+history CLI also honors `AETHER_HISTORY_ARCHIVE` when set before startup;
+its default is otherwise unchanged.
+
+Startup does not generate simulation records, download models or install
+Ollama. Normal window startup attempts to preload the configured already-installed
+local model; unavailable AI remains an explicit error/status, not simulated
+inference. The bounded `--smoke-test` checks dashboard/assets and listener
+shutdown without opening a window, preloading a model or writing telemetry.
+Weather, astronomy and browser/device permissions still have their own external
+data/runtime requirements; the HTTP smoke check is not their certification.
+
+This build is **locally ad-hoc signed, not notarized**, with the project's
+current package version. Do not bypass macOS safety warnings. Public release
+still requires bundled dependency-license review, Developer ID signing,
+hardened runtime/notarization, and native feature acceptance testing.
+
 Test drives are bounded to 1–1,000 steps and an interval of 0–60 seconds.
 The test drive records simulated entropy and action metrics to
 `historian_telemetry_vault.json` beside the launcher. Set
@@ -853,7 +1000,8 @@ Copernicus tab uses local Ollama via `AETHER_OLLAMA_MODEL` (default
 open tab, selected images, and latest cloud-cover reading may be sent. Chat is
 not persisted. The dashboard chat shows simulated governor routing telemetry;
 the model itself cannot operate Matrix controls.
-No affiliation with or endorsement by Open-Meteo is implied. Ollama must serve
+Weather data is provided by Open-Meteo; AetherSystem is an independent project.
+Ollama must serve
 the configured, already-installed model at `http://localhost:11434`.
 
 The dashboard embeds the Copernicus, Weather, and Stargazer shell at `/weather`

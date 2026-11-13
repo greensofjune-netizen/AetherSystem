@@ -325,10 +325,34 @@ changes must conflict again. Reconnection never retries rejected edits.
 This is field-value comparison, not historical revision tracking: a value changed
 and restored to the original is accepted. Legacy callers without guards retain
 unguarded behavior; Complete/Reopen are unchanged. The monitor guards every edit.
+All browser task journeys also run against `/tasks`, the focused mobile web
+preview, using the same controller. Additional Chromium Pixel emulation verifies
+manifest parsing, exact 192/512 PNG dimensions, 320/390px layout without horizontal
+overflow, nonce CSP with no runtime violations, offline read feedback and no
+service worker/Cache Storage/localStorage/sessionStorage task persistence.
+The distribution check requires every mobile asset in the wheel; source/installed/
+missing assets and no-store headers (including rejected remote requests) have API
+coverage. This is local web preparation, not physical-device installation, a
+Cloudflare deployment or a signed Google Play App Bundle. Follow the README's
+mobile release gates before exposing an origin or changing cloud access. Never
+use a real project database for the preview or embed backend credentials in assets.
 These are Chromium checks,
 not native desktop or cross-browser certification.
 No live model or real project database is used. The independent lab's Node.js/
 browser suite and native UI checks remain separate.
+
+The separate Master Matrix Mac release candidate uses
+`python build_master_matrix.py --output-dir <new-directory>` and refuses
+overwrite. `tests/test_master_desktop.py` checks private data-path selection,
+separate-process telemetry persistence, loopback/origin rejection, actual
+listener shutdown, and window-failure cleanup. Its source smoke and the built
+executable's `--smoke-test --data-directory <empty-directory>` check the dashboard
+and every served shell asset without inference or simulation. Verify the app
+with `codesign --verify --deep --strict`; scan its contents for private archives,
+logs and model weights. A successful ad-hoc signature is not notarization.
+Native window, model, weather and astronomy acceptance remain separate gates.
+Desktop data lives outside the app in the selected directory; diagnostic details
+are in `desktop.log`. Closing the native window must stop its loopback listener.
 
 For a non-destructive local CLI smoke test, use a **new empty directory** and
 explicitly point the CLI at a database inside it:
@@ -352,3 +376,17 @@ The [API tests](./tests/test_server.py), [CLI tests](./tests/test_cli.py),
 [distribution test](./tests/test_distribution.py) exercise different
 contracts. Automated tests are evidence for their covered paths, not proof
 that all models, external services, devices, deployments, or edge cases work.
+
+## Isolated Historian behavior contract
+
+The initial agent behavior contract is in
+[`src/aether_engine/agent_behavior.py`](./src/aether_engine/agent_behavior.py).
+`HistorianAgent.answer` sends the evidence-grounded, non-harmful system
+instruction to the existing local Ollama client; its fail-closed capability
+allowlist names only read-only archive search and source reading. The focused
+check is `python -m pytest -q tests/test_agent_behavior.py`. These tests verify
+prompt delivery and the local capability gate; they do not prove that a
+language model will follow instructions or that any model can guarantee zero
+harm. Before connecting this contract to a Matrix surface, test the selected
+model against reviewed safety, evidence, uncertainty, and prompt-injection
+scenarios, then keep execution behind the same read-only capability boundary.

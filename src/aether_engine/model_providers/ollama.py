@@ -10,7 +10,7 @@ from math import isfinite
 from threading import Event, Lock
 from typing import Any, Callable, Iterator
 
-from .base import ChatRequest, ChatResult, ModelInfo, ProviderHealth
+from .base import ChatRequest, ChatResult, ModelInfo, ProviderHealth, ToolCall
 
 LOGGER = logging.getLogger(__name__)
 _CANCELLATION: ContextVar[Event | None] = ContextVar(
@@ -152,25 +152,64 @@ class OllamaProvider:
                 "num_predict": request.max_output_tokens,
             },
         }
+        if request.tools:
+            payload["tools"] = [
+                {
+                    "type": "function",
+                    "function": {
+                        "name": tool.name,
+                        "description": tool.description,
+                        "parameters": tool.parameters,
+                    },
+                }
+                for tool in request.tools
+            ]
         if request.reasoning_effort == "none":
             payload["think"] = False
         result = self.request("/api/chat", payload)
         reply = result.get("message")
         if (
             not isinstance(reply, dict)
-            or not isinstance(reply.get("content"), str)
-            or not reply["content"].strip()
+            or not isinstance(reply.get("content", ""), str)
         ):
+            raise OllamaProviderError("Local Ollama returned an invalid chat response.")
+        content = reply.get("content", "")
+        tool_calls = self._tool_calls(reply.get("tool_calls", []))
+        if not content.strip() and not tool_calls:
             raise OllamaProviderError("Local Ollama returned no response text.")
         response_model = result.get("model", request.model)
         if not isinstance(response_model, str) or not response_model.strip():
             raise OllamaProviderError("Local Ollama returned an invalid model name.")
         return ChatResult(
             model=response_model,
-            content=reply["content"],
+            content=content,
             prompt_tokens=self._optional_count(result.get("prompt_eval_count")),
             completion_tokens=self._optional_count(result.get("eval_count")),
+            tool_calls=tool_calls,
         )
+
+    @staticmethod
+    def _tool_calls(value: Any) -> tuple[ToolCall, ...]:
+        if not isinstance(value, list):
+            raise OllamaProviderError("Local Ollama returned invalid tool calls.")
+        calls: list[ToolCall] = []
+        for item in value:
+            function = item.get("function") if isinstance(item, dict) else None
+            if not isinstance(function, dict):
+                raise OllamaProviderError("Local Ollama returned an invalid tool call.")
+            name = function.get("name")
+            arguments = function.get("arguments", {})
+            if isinstance(arguments, str):
+                try:
+                    arguments = json.loads(arguments)
+                except json.JSONDecodeError as error:
+                    raise OllamaProviderError(
+                        "Local Ollama returned invalid tool arguments."
+                    ) from error
+            if not isinstance(name, str) or not name.strip() or not isinstance(arguments, dict):
+                raise OllamaProviderError("Local Ollama returned an invalid tool call.")
+            calls.append(ToolCall(name=name, arguments=arguments))
+        return tuple(calls)
 
     def list_models(self) -> tuple[ModelInfo, ...]:
         result = self.request("/api/tags")

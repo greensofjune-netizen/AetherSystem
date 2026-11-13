@@ -97,6 +97,8 @@ def main(*, aristotle: bool = False) -> int:
             f"--add-binary={voice_helper}:aether_engine",
             str(launcher),
         ]
+        if aristotle:
+            command.append("--hidden-import=aether_master_matrix")
         try:
             subprocess.run(command, cwd=root, check=True)
             built_app = temp_root / "dist" / f"{app_name}.app"

@@ -10,6 +10,16 @@ let activeCoords = { name: "Upland, CA", lat: 34.0975, lon: -117.6484 };
 let busy = false;
 let lastSync = null;
 let latestWeatherContext = null;
+let latestCopilotWeather = null;
+window.addEventListener("message", (event) => {
+  if (event.origin === window.location.origin && event.source === window.parent &&
+      event.data?.type === "matrix-weather-context-request" && latestCopilotWeather) {
+    window.parent.postMessage(
+      { type: "matrix-weather-context", weather: latestCopilotWeather },
+      window.location.origin,
+    );
+  }
+});
 
 const WMO_CODES = {
   0: "Clear Sky", 1: "Mainly Clear", 2: "Partly Cloudy", 3: "Overcast",
@@ -189,6 +199,16 @@ async function syncTelemetry(query = "") {
       timezone: data.timezone,
       freshness: "live",
     };
+    latestCopilotWeather = {
+      ...latestWeatherContext,
+      temperature_f: data.current.temperature_2m,
+      wind_mph: data.current.wind_speed_10m,
+      humidity_percent: data.current.relative_humidity_2m,
+      condition: decodeWeather(data.current.weather_code),
+    };
+    if (window.parent !== window) {
+      window.parent.postMessage({ type: "matrix-weather-context", weather: latestCopilotWeather }, window.location.origin);
+    }
     window.dispatchEvent(new CustomEvent("weather-telemetry", {
       detail: latestWeatherContext,
     }));
@@ -200,6 +220,10 @@ async function syncTelemetry(query = "") {
     if (!lastSync) element("current-cond").textContent = "Weather unavailable";
     if (latestWeatherContext) {
       latestWeatherContext = { ...latestWeatherContext, freshness: "stale" };
+      latestCopilotWeather = { ...latestCopilotWeather, freshness: "stale" };
+      if (window.parent !== window) {
+        window.parent.postMessage({ type: "matrix-weather-context", weather: latestCopilotWeather }, window.location.origin);
+      }
       window.dispatchEvent(new CustomEvent("weather-telemetry", {
         detail: latestWeatherContext,
       }));

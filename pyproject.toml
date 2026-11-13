@@ -21,6 +21,7 @@ aether-los-link = "aether_engine.los_link:main"
 aether-quantum-diagnostics = "aether_engine.quantum_simulator:diagnostics_main"
 aether-quantum-simulate = "aether_engine.quantum_simulator:simulate_main"
 aether-master-matrix = "aether_master_matrix:main"
+aether-master-desktop = "aether_engine.master_desktop:main"
 galileo = "aether_engine.galileo_desktop:main"
 matrix-aristotle = "aether_engine.aristotle_desktop:main"
 
@@ -28,15 +29,15 @@ matrix-aristotle = "aether_engine.aristotle_desktop:main"
 dev = ["build>=1.2.2", "httpx>=0.28.1", "mypy>=2.4.1", "numpy>=2.4.6", "pandas>=3.1.1", "pandas-stubs>=3.1.0.261029", "playwright>=1.65.0", "pytest>=9.2.0", "ruff>=0.17.4", "skyfield>=1.55", "types-ephem>=4.2.0.20260724"]
 build = ["pyinstaller>=6.22.3"]
 local-ai = ["llama-cpp-python>=0.3.36"]
-api = ["ephem>=4.2.1", "fastapi>=0.162.4", "pandas>=3.1.1", "pydantic>=2.14.3", "skyfield>=1.55", "uvicorn>=0.54.0"]
-calculator-api = ["fastapi>=0.162.4", "numpy>=2.4.6", "pydantic>=2.14.3", "uvicorn>=0.54.0"]
+api = ["ephem>=4.2.1", "fastapi>=0.162.5", "pandas>=3.1.1", "pydantic>=2.14.3", "skyfield>=1.55", "uvicorn>=0.54.0"]
+calculator-api = ["fastapi>=0.162.5", "numpy>=2.4.6", "pydantic>=2.14.3", "uvicorn>=0.54.0"]
 behavioral-demo = ["torch>=2.15.0"]
 command-center = ["numpy>=2.4.6", "pandas>=3.1.1", "skyfield>=1.55"]
 ollama = ["ollama>=0.6.3"]
 spin-network = ["numpy>=2.4.6"]
 spin-network-visualization = ["numpy>=2.4.6", "matplotlib>=3.11.2"]
 secure-vault = ["cryptography>=50.0.2"]
-desktop = ["ephem>=4.2.1", "fastapi>=0.162.4", "numpy>=2.4.6", "pandas>=3.1.1", "pydantic>=2.14.3", "pywebview>=6.2.1", "skyfield>=1.55", "uvicorn>=0.54.0"]
+desktop = ["ephem>=4.2.1", "fastapi>=0.162.5", "numpy>=2.4.6", "pandas>=3.1.1", "pydantic>=2.14.3", "pywebview>=6.2.1", "skyfield>=1.55", "uvicorn>=0.54.0"]
 
 [tool.setuptools]
 py-modules = [
@@ -56,6 +57,11 @@ aether_engine = ["galileo_assets/*", "galileo_voice.swift"]
 
 [tool.setuptools.data-files]
 "share/aether-engine/frontend" = ["frontend/aether_client.js", "frontend/index.html", "frontend/monitor_tasks.js"]
+"share/aether-engine/frontend/tasks" = [
+    "frontend/tasks/index.html", "frontend/tasks/tasks.css",
+    "frontend/tasks/manifest.webmanifest", "frontend/tasks/icon.svg",
+    "frontend/tasks/icon-192.png", "frontend/tasks/icon-512.png",
+]
 "share/aether-engine/protocol" = [
     "aether_protocol.schema.json",
     "include/aether_bridge.h",
@@ -65,6 +71,7 @@ aether_engine = ["galileo_assets/*", "galileo_voice.swift"]
     "frontend/weather.html", "frontend/weather.css", "frontend/weather.js",
     "frontend/stargazer.html", "frontend/stargazer.css", "frontend/stargazer.js",
     "frontend/astronomy.css", "frontend/speech.js",
+    "frontend/copernicus.js", "frontend/persona_matrix.js", "frontend/persona_matrix.css",
 ]
 
 [tool.pytest.ini_options]

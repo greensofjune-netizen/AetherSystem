@@ -57,6 +57,26 @@ def test_distribution_is_licensed_and_core_runs_without_extras(tmp_path: Path) -
                 if name.endswith(f"/share/aether-engine/frontend/{asset}")
             )
             assert archive.read(asset_path) == (root / "frontend" / asset).read_bytes()
+        for asset in (
+            "index.html", "tasks.css", "manifest.webmanifest",
+            "icon.svg", "icon-192.png", "icon-512.png",
+        ):
+            asset_path = next(
+                name for name in names
+                if name.endswith(f"/share/aether-engine/frontend/tasks/{asset}")
+            )
+            assert archive.read(asset_path) == (root / "frontend" / "tasks" / asset).read_bytes()
+        for asset in (
+            "weather.html", "weather.css", "weather.js", "copernicus.js",
+            "persona_matrix.js", "persona_matrix.css", "stargazer.html",
+            "stargazer.css", "stargazer.js", "astronomy.css", "speech.js",
+        ):
+            asset_path = next(
+                name for name in names
+                if name.endswith(f"/share/aether-engine/observatory/{asset}")
+            )
+            assert archive.read(asset_path) == (root / "frontend" / asset).read_bytes()
+        assert "aether_engine/master_desktop.py" in names
         metadata = Parser().parsestr(archive.read(metadata_path).decode("utf-8"))
         assert metadata["License-Expression"] == "MIT"
         assert metadata.get_all("License-File") == ["LICENSE"]

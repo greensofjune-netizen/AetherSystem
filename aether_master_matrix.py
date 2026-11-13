@@ -438,21 +438,24 @@ _DASHBOARD_HTML = """<!DOCTYPE html>
 """
 
 
-def _read_telemetry() -> list[dict[str, object]]:
-    if not LOG_FILE.exists():
+def _read_telemetry(telemetry_path: Path | None = None) -> list[dict[str, object]]:
+    path = telemetry_path or LOG_FILE
+    if path.is_symlink():
+        raise RuntimeError(f"Telemetry vault cannot be a symlink: {path}")
+    if not path.exists():
         return []
 
     try:
-        with LOG_FILE.open("r", encoding="utf-8") as file:
+        with path.open("r", encoding="utf-8") as file:
             data = json.load(file)
     except (OSError, UnicodeDecodeError, json.JSONDecodeError) as error:
         raise RuntimeError(
-            f"Could not read telemetry vault {LOG_FILE}: {error}"
+            f"Could not read telemetry vault {path}: {error}"
         ) from error
 
     if not isinstance(data, list) or not all(isinstance(item, dict) for item in data):
         raise RuntimeError(
-            f"Telemetry vault {LOG_FILE} must contain a JSON array of objects."
+            f"Telemetry vault {path} must contain a JSON array of objects."
         )
     return data
 
@@ -486,8 +489,11 @@ def log_telemetry_event(
     entropy: float,
     action_density: float,
     status: str,
+    *,
+    telemetry_path: Path | None = None,
 ) -> None:
     """Append one simulated matrix state to the JSON telemetry vault."""
+    path = telemetry_path or LOG_FILE
     if type(epoch) is not int or epoch < 1:
         raise ValueError("epoch must be a positive integer.")
     for name, value in (
@@ -513,16 +519,16 @@ def log_telemetry_event(
     }
 
     with _telemetry_lock:
-        vault_data = _read_telemetry()
+        vault_data = _read_telemetry(path)
         vault_data.append(entry)
         temporary_path: Path | None = None
         try:
-            LOG_FILE.parent.mkdir(parents=True, exist_ok=True)
+            path.parent.mkdir(parents=True, exist_ok=True)
             with tempfile.NamedTemporaryFile(
                 mode="w",
                 encoding="utf-8",
-                dir=LOG_FILE.parent,
-                prefix=f".{LOG_FILE.name}.",
+                dir=path.parent,
+                prefix=f".{path.name}.",
                 suffix=".tmp",
                 delete=False,
             ) as file:
@@ -531,10 +537,10 @@ def log_telemetry_event(
                 file.write("\n")
                 file.flush()
                 os.fsync(file.fileno())
-            os.replace(temporary_path, LOG_FILE)
+            os.replace(temporary_path, path)
         except OSError as error:
             raise RuntimeError(
-                f"Could not write telemetry vault {LOG_FILE}: {error}"
+                f"Could not write telemetry vault {path}: {error}"
             ) from error
         finally:
             if temporary_path is not None:
@@ -757,10 +763,13 @@ class HistorianLiveServer(BaseHTTPRequestHandler):
         }
         if path in frontend_assets:
             filename, content_type = frontend_assets[path]
+            asset_directory = Path(__file__).resolve().parent / "frontend"
+            if not asset_directory.is_dir():
+                asset_directory = (
+                    Path(sys.prefix) / "share" / "aether-engine" / "observatory"
+                )
             try:
-                content = (
-                    Path(__file__).resolve().parent / "frontend" / filename
-                ).read_bytes()
+                content = (asset_directory / filename).read_bytes()
             except OSError as error:
                 self.log_error("Frontend asset read failed: %s", error)
                 self.send_error(
@@ -1127,6 +1136,8 @@ class LocalThreadingHTTPServer(ThreadingHTTPServer):
 async def run_master_matrix_test_drive(
     steps: int = 30,
     interval_seconds: float = 0.05,
+    *,
+    telemetry_path: Path | None = None,
 ) -> None:
     """Simulate a bounded collapse test drive and persist its telemetry."""
     if type(steps) is not int or not 1 <= steps <= MAX_TEST_DRIVE_STEPS:
@@ -1172,6 +1183,7 @@ async def run_master_matrix_test_drive(
             entropy=simulated_entropy,
             action_density=macro_data["total_action_density"],
             status=status,
+            telemetry_path=telemetry_path,
         )
 
         if epoch % 10 == 0 or epoch == steps:
@@ -1180,7 +1192,7 @@ async def run_master_matrix_test_drive(
                 f"Scale: {scale:.3f} | Entropy: {simulated_entropy:.2f} Nats"
             )
 
-    print(f"\n[TEST DRIVE COMPLETE] Telemetry saved to {LOG_FILE}.")
+    print(f"\n[TEST DRIVE COMPLETE] Telemetry saved to {telemetry_path or LOG_FILE}.")
 
 
 def run_web_server(host: str = "127.0.0.1", port: int = 8000) -> None:
