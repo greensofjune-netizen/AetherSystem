@@ -638,11 +638,11 @@ def seed_example_history(archive: UniversalHistoryArchive) -> None:
                 "late third-millennium Mesopotamia.",
             ),
         ]
-        for link in connection_source_links:
+        for connection_link in connection_source_links:
             conn.execute(
                 "INSERT INTO historical_connection_sources VALUES (?, ?, ?, ?, ?) "
                 "ON CONFLICT DO NOTHING",
-                link,
+                connection_link,
             )
         for entity_id, source_id, _ in entity_source_links:
             item = next(item for item in examples if item.entity_id == entity_id)

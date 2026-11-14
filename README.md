@@ -45,8 +45,10 @@ Third-party materials retain their own terms; see
 The initial release target is the source repository and core local CLI.
 Optional desktop apps and hosted services are separate release targets, not
 certified or production-ready by virtue of the core tests passing. CI checks
-Python 3.11 and 3.14 on macOS and Linux; Windows instructions are provided, but
-Windows is not currently tested in CI.
+Python 3.11 and 3.14 on macOS and Linux, while a separate frontend workflow
+checks the validation contract and Quantum Light Lab on Node.js 24 across
+Chromium, Firefox, and WebKit. Both workflows run on pushes and pull requests;
+Windows instructions are provided, but Windows is not currently tested in CI.
 
 Runtime metrics (`aether_metrics.json`), the Matrix simulation log
 (`historian_telemetry_vault.json`), and the generated knowledge ledger
@@ -73,6 +75,9 @@ Before publishing:
 - With Node.js 24, run `node --test tests/test_validation_frontend.mjs` and
   `node tests/test_validation_types.ts`. CI also checks the validation model
   with TypeScript 5.9.3; these tests protect the structured HTTP 422 contract.
+- Frontend CI runs the Quantum Light Lab unit and browser suites from
+  `quantum-lab/` using the pinned Node version in `.nvmrc`, with Chromium,
+  Firefox, and WebKit projects.
 - Build release files with `python -m build` after installing the development
   dependencies. This writes the source archive and wheel to `dist/`; review
   their contents and test the exact files intended for upload.

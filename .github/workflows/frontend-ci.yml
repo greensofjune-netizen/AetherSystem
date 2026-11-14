@@ -1,0 +1,37 @@
+name: Frontend CI
+
+on:
+  push:
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  frontend:
+    timeout-minutes: 25
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v7.0.1
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version-file: quantum-lab/.nvmrc
+          cache: npm
+          cache-dependency-path: quantum-lab/package-lock.json
+      - name: Type-check validation contract
+        run: npm exec --yes --package=typescript@5.9.3 -- tsc --noEmit --strict --target ES2020 --module NodeNext --moduleResolution NodeNext --allowImportingTsExtensions tests/test_validation_types.ts
+      - name: Test frontend validation
+        run: node --test tests/test_validation_frontend.mjs
+      - name: Test TypeScript validation
+        run: node tests/test_validation_types.ts
+      - name: Install Quantum Light Lab dependencies
+        working-directory: quantum-lab
+        run: npm ci
+      - name: Install Playwright browsers
+        working-directory: quantum-lab
+        run: npx playwright install --with-deps chromium firefox webkit
+      - name: Test Quantum Light Lab
+        working-directory: quantum-lab
+        run: npm run test:all

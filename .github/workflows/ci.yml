@@ -23,10 +23,6 @@ jobs:
         uses: actions/setup-python@v7.1.0
         with:
           python-version: ${{ matrix.python-version }}
-      - name: Set up Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: "24"
       - name: Install Linux SSH test prerequisites
         if: runner.os == 'Linux'
         run: |
@@ -47,11 +43,5 @@ jobs:
         run: ruff check .
       - name: Type-check Python
         run: mypy
-      - name: Type-check validation contract
-        run: npm exec --yes --package=typescript@5.9.3 -- tsc --noEmit --strict --target ES2020 --module NodeNext --moduleResolution NodeNext --allowImportingTsExtensions tests/test_validation_types.ts
-      - name: Test frontend validation
-        run: node --test tests/test_validation_frontend.mjs
-      - name: Test TypeScript validation
-        run: node tests/test_validation_types.ts
       - name: Run Python test suite
         run: python -m pytest
