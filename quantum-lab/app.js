@@ -243,7 +243,7 @@
     frame = requestAnimationFrame(guarded(tick));
   }
 
-  function configure() {
+  function configure(announceChange = true) {
     lab.configure({
       wavelengthNm: Number($("wavelength").value),
       slitSeparationMm: Number($("separation").value),
@@ -253,7 +253,7 @@
     $("wavelength-value").textContent = `${$("wavelength").value} nm`;
     $("separation-value").textContent = `${Number($("separation").value).toFixed(2)} mm`;
     credit = 0; lastTime = null;
-    announce("Physics changed. Detections cleared for a fresh experiment.");
+    if (announceChange) announce("Physics changed. Detections cleared for a fresh experiment.");
     refresh();
   }
 
@@ -298,6 +298,15 @@
     if (document.hidden && running) { stop("Paused while this tab is hidden. Resume when ready."); refresh(); }
   }));
   window.addEventListener("resize", guarded(sizeCanvases));
+  window.addEventListener("pageshow", guarded(() => {
+    if (performance.getEntriesByType("navigation")[0]?.type !== "reload") return;
+    document.querySelectorAll('input[type="range"]').forEach((input) => {
+      input.value = input.defaultValue;
+    });
+    configure(false);
+    updateEquilibrium();
+    $("rate-value").textContent = `${$("rate").value} / s`;
+  }));
   guarded(() => {
     updateEquilibrium();
     sizeCanvases();
