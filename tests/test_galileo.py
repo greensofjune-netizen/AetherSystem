@@ -663,6 +663,20 @@ def test_desktop_window_failure_still_stops_backend():
     server.stop.assert_called_once()
 
 
+def test_aristotle_window_fits_compact_mac_display():
+    server = Mock()
+    server.aristotle = True
+    webview = Mock()
+
+    run_desktop(server, webview)
+
+    assert webview.create_window.call_args.args[0] == "Matrix Aristotle"
+    assert webview.create_window.call_args.kwargs["width"] == 1080
+    assert webview.create_window.call_args.kwargs["height"] == 680
+    assert webview.create_window.call_args.kwargs["min_size"] == (760, 520)
+    server.stop.assert_called_once()
+
+
 def test_window_shutdown_interrupts_waiting_ollama_response(monkeypatch):
     import http.client
     from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer

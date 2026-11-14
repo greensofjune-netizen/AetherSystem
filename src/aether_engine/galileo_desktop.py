@@ -156,9 +156,9 @@ def run_desktop(
         webview.create_window(
             "Matrix Aristotle" if server.aristotle else "Galileo",
             server.url,
-            width=1200,
-            height=820,
-            min_size=(760, 560),
+            width=1080,
+            height=680,
+            min_size=(760, 520),
             background_color="#120b07",
             js_api=actions,
         )

@@ -665,6 +665,7 @@ def test_command_center_chat_uses_history_archive(matrix, monkeypatch, tmp_path)
         assert observed["prompt"] == "Tell me about Sumer"
         assert "sumer_01" in observed["system"]
         assert "unverified" in observed["system"]
+        assert "britannica.com/place/Sumer" in observed["system"]
     finally:
         server.shutdown()
         server.server_close()

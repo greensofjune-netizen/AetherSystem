@@ -32,6 +32,15 @@ def test_seed_queries_regions_tags_and_links(tmp_path: Path):
     snapshot = archive.query_time_slice(-2500)
     assert len(snapshot) == 3
     assert archive.query_time_slice(-2500, "South Asia")[0]["entity_id"] == "indus_01"
+    records = {record["entity_id"]: record for record in archive.query_time_slice(-2500)}
+    assert records["egypt_old_01"]["category"] == "Historical Period"
+    assert records["egypt_old_01"]["start_year"] == -2649
+    assert records["egypt_old_01"]["end_year"] == -2150
+    assert records["indus_01"]["category"] == "Civilization"
+    assert records["indus_01"]["start_year"] == -2600
+    assert records["indus_01"]["end_year"] == -1900
+    assert records["sumer_01"]["category"] == "Civilization"
+    assert records["sumer_01"]["start_year"] == -3300
     assert archive.query_time_slice(-5000) == []
     assert archive.query_time_slice(-2500)[0]["metadata_tags"] == [
         "Bronze Age", "Mesopotamia", "Cuneiform", "Wheel"
@@ -41,6 +50,10 @@ def test_seed_queries_regions_tags_and_links(tmp_path: Path):
     assert "sumer_01" in context and "indus_01" in context
     assert "Traded_With" in context
     assert "sumer_01" in archive.context_for_message("Tell me about Sumer")
+    meluhha_context = archive.context_for_message("Tell me about Meluhha trade")
+    assert "britannica.com/topic/Indus-civilization" in meluhha_context
+    assert "jstor.org/stable/3631775" in meluhha_context
+    assert "qualified scholarly identification" in meluhha_context
     assert archive.context_for_message("Hello there") == ""
 
 
@@ -77,6 +90,37 @@ def test_seed_never_overwrites_existing_entries(tmp_path: Path):
     seed_example_history(archive)
     records = {record["entity_id"]: record for record in archive.query_time_slice(-2500)}
     assert records["sumer_01"]["name"] == "Example Civilization"
+    custom_context = archive.context_for_message("Tell me about Example Civilization")
+    assert "britannica.com/place/Sumer" not in custom_context
+    assert "jstor.org/stable/3631775" not in custom_context
+
+
+def test_seed_migrates_exact_legacy_examples_and_sources(tmp_path: Path):
+    archive = UniversalHistoryArchive(tmp_path / "history.sqlite3")
+    with archive._connect() as conn:
+        conn.executemany(
+            "INSERT INTO historical_entities VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+            [
+                (
+                    "sumer_01", "Sumerian Civilization", "Empire", "Near East",
+                    -4500, -1900,
+                    "A civilization of southern Mesopotamia associated with cuneiform writing, "
+                    "irrigation, and early cities.",
+                    json.dumps(["Bronze Age", "Mesopotamia", "Cuneiform", "Wheel"]),
+                ),
+                (
+                    "custom", "Custom", "Empire", "Elsewhere", -4500, -1900,
+                    "Custom record.", json.dumps(["Test"]),
+                ),
+            ],
+        )
+    seed_example_history(archive)
+
+    entities = {row["entity_id"]: row for row in archive.query_time_slice(-2500)}
+    assert entities["sumer_01"]["category"] == "Civilization"
+    assert entities["sumer_01"]["start_year"] == -3300
+    assert entities["custom"]["category"] == "Empire"
+    assert "britannica.com/place/Sumer" in archive.context_for_message("Sumer")
 
 
 def test_historian_model_receives_relevant_context(tmp_path: Path, monkeypatch):
@@ -107,6 +151,8 @@ def test_historian_model_receives_relevant_context(tmp_path: Path, monkeypatch):
             assert captured["prompt"] == "What happened in 2500 BCE?"
             assert "sumer_01" in captured["system"]
             assert "unverified" in captured["system"]
+            assert "britannica.com/place/Sumer" in captured["system"]
+            assert "Cite the supplied source title and URL" in captured["system"]
 
     asyncio.run(check())
 

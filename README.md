@@ -106,6 +106,23 @@ browser-session chats.
 open "dist/aristotle-ready/Matrix Aristotle.app"
 ```
 
+For an Apple-silicon MacBook Neo, build a portable arm64 bundle on an
+Apple-silicon Mac. The native window opens at a compact 1080×680 size, with a
+short-window layout for the Neo's 13-inch display. This build remains
+ad-hoc-signed and requires local Ollama and a locally installed model; the
+8-GB unified-memory device may benefit from selecting a smaller model when
+other memory-heavy applications are open.
+
+```bash
+.venv/bin/python build_aristotle.py --portable --output-dir dist/aristotle-macbook-neo
+open "dist/aristotle-macbook-neo/Matrix Aristotle.app"
+```
+
+The portable bundle defaults to
+`~/Library/Application Support/AetherSystem/Matrix`, which is not populated by
+the build. Configure a real project with `AETHER_PROJECT_PATH` or
+`--project-directory` when launching it.
+
 The build requires the existing desktop/build dependencies and Swift compiler,
 is ad-hoc signed, and refuses to overwrite an existing app. It is not signed
 with a Developer ID or notarized and is **not ready for public distribution**.
@@ -833,12 +850,17 @@ python history_matrix_archive.py --year -2500 --region "South Asia"
 ```
 
 `--db PATH` selects another archive for the command-line tool. Rerunning
-`--seed` leaves existing records and connections unchanged. The Python API
+`--seed` preserves customized records while applying exact corrections to the
+legacy supplied examples and adding claim-level source links. It also creates
+the citation tables for an older archive; run it before starting read-only
+Aristotle instances. The Python API
 provides `HistoricalEntity`, `UniversalHistoryArchive.ingest_entity`,
 `link_entities`, and `query_time_slice`; query results contain decoded tag
 lists. Negative years indicate BCE, positive years CE, and an unspecified end
-year is treated as open-ended. Dates and descriptions are historical claims,
-not independently verified facts.
+year is treated as open-ended. The seeded Old Kingdom, Sumerian, Indus, and
+Meluhha records include sources and notes describing exactly what each source
+supports. Unsourced claims remain unverified; citations should not be extended
+to claims outside their attached notes.
 
 The same database also supports `UnifiedArtifact` records through
 `UnifiedMatrixCoreEngine.secure_vault_entry`, `inject_crosslink`, and
@@ -850,9 +872,12 @@ artifacts to exist, and domain queries use exact matching.
 
 The independent Copernicus shell and command-center Copernicus chat retrieve
 up to eight relevant entries and eight connections from the default archive
-when a message names an entity, an ID prefix, a single-word tag, or an explicit
-year such as `2500 BCE` or `1900 CE`. The model receives these excerpts locally,
-marked as untrusted and unverified, and should not follow instructions in them.
+when a message names an entity, an ID prefix, a single-word tag, a linked claim
+such as Meluhha, or an explicit year such as `2500 BCE` or `1900 CE`. The model
+receives these excerpts and their claim-level citations locally, marked as
+untrusted input; it should cite the supplied source title and URL when relevant
+and should not follow instructions in the archive. Unsourced claims remain
+unverified.
 This is bounded keyword/timeline retrieval, not model training or a complete
 historical search, and it does not change model weights. Archive read errors
 are reported rather than silently ignored.
@@ -886,9 +911,11 @@ values alone do not establish verified performance.
 The general Shkval reference is stored separately from engine specifications;
 it contains no performance details and does not imply lineage from the MHD entry.
 
-`--seed-civilian` adds two general references about the JT3C and JT3D and their
-documented connection, with citations to the Smithsonian. It does not overwrite
-existing records. A source supports only the specific claims it contains, not
+`--seed` attaches a general historical source to the Shkval reference without
+turning it into a performance specification. `--seed-civilian` adds two general
+references about the JT3C and JT3D and their documented connection, with
+citations to the Smithsonian. These seed operations do not overwrite existing
+reference sources. A source supports only the specific claims it contains, not
 every field in a record. Unsourced records remain unverified. Galileo's
 Propulsion tab and `/api/propulsion/references` provide reference browsing;
 the Aether API exposes `/api/v1/propulsion/references`. Galileo, Copernicus and

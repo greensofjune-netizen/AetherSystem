@@ -47,6 +47,11 @@ def test_seed_filter_and_json_roundtrip(tmp_path: Path):
     assert len(references) == 1
     assert references[0]["reference_id"] == "supercavitating_shkval_01"
     assert references[0]["name"] == "Shkval"
+    shkval = archive.search_references("Shkval")[0]
+    assert shkval["source_url"] == (
+        "https://www.usni.org/magazines/proceedings/2019/october/red-subs-rising"
+    )
+    assert "usni.org" in archive.context_for_message("Tell me about Shkval")
     with sqlite3.connect(path) as conn:
         assert conn.execute("SELECT COUNT(*) FROM engine_lineage").fetchone() == (0,)
 
@@ -190,7 +195,8 @@ def test_context_only_includes_named_sourced_references(tmp_path: Path):
     assert "untrusted data" in context
     assert "airandspace.si.edu" in context
     assert "JT3D" in context
-    assert archive.context_for_message("Tell me about Shkval") == ""
+    shkval_context = archive.context_for_message("Tell me about Shkval")
+    assert "usni.org/magazines/proceedings" in shkval_context
 
 
 def test_audit_and_backup_record_updates_and_deletes(tmp_path: Path):

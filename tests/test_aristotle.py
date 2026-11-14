@@ -6,7 +6,11 @@ import httpx
 
 from aether_engine.galileo import ConversationStore, create_app
 from aether_engine.model_providers import ChatResult, ToolCall
-from history_matrix_archive import HistoricalEntity, UniversalHistoryArchive
+from history_matrix_archive import (
+    HistoricalEntity,
+    UniversalHistoryArchive,
+    seed_example_history,
+)
 
 
 def test_aristotle_unifies_chat_history_archive_and_matrix(tmp_path, monkeypatch):
@@ -23,6 +27,7 @@ def test_aristotle_unifies_chat_history_archive_and_matrix(tmp_path, monkeypatch
         HistoricalEntity("athens_1", "Athens", "city", "Greece", -500, 300,
                          "Ancient Athens was a Greek city.", ["history"])
     )
+    seed_example_history(archive)
     (project / "historian_telemetry_vault.json").write_text(
         json.dumps([{"epoch": 3, "system_status": "BOUNCE_ACTIVE"}])
     )
@@ -69,12 +74,15 @@ def test_aristotle_unifies_chat_history_archive_and_matrix(tmp_path, monkeypatch
             assert '"estimated_total_gb": 4.1' in system
             assert "Ancient Athens" not in system
             response = await client.post(url, json={
-                "message": "Tell me about Athens", "model": "test", "include_history": True
+                "message": "Tell me about Athens and Sumer",
+                "model": "test",
+                "include_history": True,
             })
             assert response.status_code == 200
             system = provider.chat.call_args.args[0].messages[0].content
             assert "Ancient Athens" in system
             assert "not instructions" in system
+            assert "britannica.com/place/Sumer" in system
             assert (await client.get("/aristotle.js")).status_code == 200
             weather_page = await client.get("/weather")
             assert weather_page.status_code == 200

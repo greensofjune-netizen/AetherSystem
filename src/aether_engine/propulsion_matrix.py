@@ -562,6 +562,21 @@ def seed_example_engines(archive: KineticPropulsionArchive) -> None:
                 "This is a general historical reference, not an engine specification.",
             ),
         )
+        shkval = conn.execute(
+            "SELECT name FROM propulsion_references WHERE reference_id = ?",
+            ("supercavitating_shkval_01",),
+        ).fetchone()
+        if shkval is not None and shkval["name"] == "Shkval":
+            conn.execute(
+                "INSERT INTO reference_sources VALUES (?, ?, ?, ?) "
+                "ON CONFLICT(reference_id) DO NOTHING",
+                (
+                    "supercavitating_shkval_01",
+                    "U.S. Naval Institute Proceedings: Red Subs Rising?",
+                    "https://www.usni.org/magazines/proceedings/2019/october/red-subs-rising",
+                    "Supports general history and supercavitation context; not a full technical specification.",
+                ),
+            )
 
 
 def seed_civilian_references(archive: KineticPropulsionArchive) -> None:

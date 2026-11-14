@@ -9,3 +9,18 @@
 #history-results li{margin-block:1rem;overflow-wrap:anywhere}
 #matrix-panel table{border-collapse:collapse;max-width:100%;margin-block:1rem}
 #matrix-panel th,#matrix-panel td{text-align:left;padding:.4rem;border-bottom:1px solid var(--line)}
+@media(max-height:740px){
+  .app-shell{height:100dvh}
+  .main{min-height:0}
+  .sidebar{padding-block:20px 16px}
+  .brand{padding-bottom:20px}
+  .sidebar-heading{margin-top:22px}
+  .topbar{min-height:78px;padding-block:14px}
+  .tabs{min-height:48px}
+  .tab{padding-block:12px}
+  .chat-meta{padding-block:16px 10px}
+  .privacy-note{padding-block:8px}
+  .messages{min-height:120px;max-height:none;padding-block:12px}
+  .module-heading{padding-block:16px 10px}
+  iframe{min-height:0}
+}
