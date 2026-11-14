@@ -14,6 +14,7 @@ from pathlib import Path
 from typing import Final, Literal, Sequence
 
 from .quantum_engine import QuantumStateSimulator, StateCollapseAnomalyError
+from .symbiotic_equilibrium import SymbioticEquilibriumEngine, SystemBranch
 
 DiagnosticStatus = Literal["OK", "WARN", "FAIL"]
 LOW_MEMORY_BYTES: Final[int] = 512 * 1024**2
@@ -55,6 +56,7 @@ class SystemDiagnosticScanner:
             self._check_storage(),
             self._check_project(),
             self._check_simulator(),
+            self._check_equilibrium(),
         )
 
     def render_report(
@@ -226,6 +228,49 @@ class SystemDiagnosticScanner:
             "Quantum simulator",
             "FAIL",
             "The entropy threshold did not trigger the collapse guard.",
+        )
+
+    @staticmethod
+    def _check_equilibrium() -> SystemDiagnosticCheck:
+        engine = SymbioticEquilibriumEngine()
+        try:
+            engine.register_branch(
+                SystemBranch("diagnostic-healthy", "Diagnostics", 0.7, 0.1, 0)
+            )
+            admitted_harmful = engine.register_branch(
+                SystemBranch("diagnostic-harmful", "Diagnostics", 0.9, 0.1, 0.1)
+            )
+            engine.register_branch(
+                SystemBranch(
+                    "diagnostic-stale",
+                    "Diagnostics",
+                    0.1,
+                    0.1,
+                    0,
+                    is_stale=True,
+                )
+            )
+            engine.prune_and_compost()
+            report = engine.system_health_report()
+        except (TypeError, ValueError, ArithmeticError) as error:
+            return SystemDiagnosticCheck(
+                "Symbiotic equilibrium", "FAIL", f"Self-check failed: {error}"
+            )
+        if (
+            admitted_harmful
+            or report["registered_branches"] != 1
+            or report["composted_count"] != 1
+            or not report["zero_harm_verified"]
+        ):
+            return SystemDiagnosticCheck(
+                "Symbiotic equilibrium",
+                "FAIL",
+                "Admission, pruning, compost, or zero-harm invariants failed.",
+            )
+        return SystemDiagnosticCheck(
+            "Symbiotic equilibrium",
+            "OK",
+            "The zero-harm invariant holds; harmful admission is blocked and stale harmless branches compost in memory.",
         )
 
 

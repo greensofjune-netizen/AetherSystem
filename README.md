@@ -104,7 +104,11 @@ design. Copernicus is the primary chat copilot for the Matrix agent in this
 desktop; it is not a second independently acting agent. It reuses Galileo's
 existing conversation directory and does not migrate
 or combine the separate historical archive, Matrix telemetry, or Copernicus
-browser-session chats.
+browser-session chats. The Matrix Engine panel links directly to the shared
+Formula Lab state-vector simulator; circuit calculations remain local and are
+not persisted. It also exposes the Symbiotic Equilibrium blueprint as an
+in-memory stewardship simulator; its branch pruning never operates on project
+files, archives, or live services.
 
 ```bash
 .venv/bin/python build_aristotle.py --output-dir dist/aristotle-ready
@@ -316,11 +320,18 @@ Galileo's loopback API, with a maximum of 12 qubits, 256 gates, and 10,000
 measurement shots per request. It supports H, X, Y, Z, S, T, RX, RY, RZ, CNOT,
 and CZ. Qubit 0 is the least-significant state-vector bit; displayed bit strings
 run most-significant bit first. Seeded measurement counts are reproducible.
+Matrix Aristotle's Matrix Engine panel includes a shortcut to this same
+simulator and focuses the first input after opening Formula Lab.
 This is exact circuit math, not a model of quantum hardware, noise, or a real
 device. The separate scalar coherence/entropy index is illustrative; the
-spin-network sample is seeded and simplified; and the radio estimate omits
-terrain, buildings, weather, antenna patterns, and measured signal strength.
+spin-network sample is seeded and simplified. The radio form is geometry-only;
+its API can additionally accept user-supplied terrain/building profiles, manual
+weather inputs, and approximate antenna/equipment parameters.
 Inputs and results are not saved or sent to chat.
+The Matrix Aristotle **Symbiotic Equilibrium** panel is a separate
+in-memory stewardship demonstration: its zero-harm gate, vitality cycle, and
+pruning operate only on branches registered in the current app process.
+Pruning does not delete or alter real services, project files, or archives.
 Visible-star astronomy remains in **Stargazer**, while natal-chart and
 Pythagorean numerology calculations remain in **Astrology**. Propulsion
 equations in the archive are user-supplied reference data and are not executed.
@@ -1197,21 +1208,51 @@ NumPy and Matplotlib dependencies with
 The radio LOS estimator is available as `aether-los-link` or
 `python -m aether_engine.los_link`. It estimates great-circle distance, a
 4/3-Earth radio horizon, midpoint curvature/Fresnel clearance, and free-space
-path loss; by default it publishes a `LOS_LINK_BUDGET_CALCULATED` event through
-the unified API as node `MATRIX`, which reaches connected affiliates. Use
-`--no-publish` for offline calculations or `AETHER_DISPATCH_URL` to select
-another endpoint. Remote publishing uses `AETHER_API_TOKEN` over HTTPS. This is
-a geometric estimate only, not a terrain survey or guaranteed RF link.
+path loss. The `POST /api/formulas/los-link` endpoint also accepts optional
+`path_profile` samples (distance fractions from 0 to 1, terrain elevation,
+and intermediate building heights), manual `weather` inputs (rain rate,
+rain-path length, polarization, and other supplied weather loss), and
+`radio` parameters (transmit power, receiver sensitivity, and per-endpoint
+antenna gain, boresight, beamwidth, and feedline loss). Profile diffraction is
+a dominant single knife-edge estimate based on ITU-R P.526-16; rain specific
+attenuation uses ITU-R P.838-3. Antenna gain uses a clipped quadratic
+beamwidth approximation, not measured antenna-pattern tables. Received signal
+strength and link margin are omitted unless explicit radio parameters are
+provided. The model uses no live terrain, building, or weather data and is not
+a field survey or guaranteed RF link.
+
+The CLI remains a geometry-only estimate. By default it publishes a
+`LOS_LINK_BUDGET_CALCULATED` event through the unified API as node `MATRIX`,
+which reaches connected affiliates. Use `--no-publish` for offline
+calculations or `AETHER_DISPATCH_URL` to select another endpoint. Remote
+publishing uses `AETHER_API_TOKEN` over HTTPS. Reference recommendations:
+[ITU-R P.526](https://www.itu.int/rec/R-REC-P.526/en) and
+[ITU-R P.838](https://www.itu.int/rec/R-REC-P.838/en).
 
 `aether_engine.arts_telemetry` creates MUSIC, ART, and THEATRE session plans
 with the same LOS estimate and publishes them through MATRIX. Stage cues are
 published as `REQUIRES_OPERATOR_APPROVAL` requests only; this module does not
-start media streams or send OSC/DMX packets. At 60 GHz the geometric LOS result
-does not account for oxygen absorption, rain fade, terrain, or equipment
-limits. The `aether-engine status` terminal dashboard shows the latest
+start media streams or send OSC/DMX packets. Arts session plans use the
+geometry-only LOS invocation; at 60 GHz that result does not account for
+oxygen absorption, rain fade, terrain, or equipment limits. The
+`aether-engine status` terminal dashboard shows the latest
 MATRIX arts/LOS event. The local `aether_master_matrix.py` dashboard polls its
 read-only `/api/matrix/arts/latest` endpoint to display the same event in a
 browser on the Mac.
+
+The Symbiotic Equilibrium blueprint is available as
+`aether_engine.symbiotic_equilibrium` and the `aether-symbiotic-equilibrium`
+command. Run `aether-symbiotic-equilibrium --cycle demo` (the default) for a
+local, in-memory admission, pruning, nurture, and health-report example; use
+`--cycle report`, `--cycle nurture`, or `--cycle prune` to run a single cycle.
+The Aristotle Matrix Engine API exposes branch registration, nurture, prune,
+and snapshots at `/api/aristotle/equilibrium`. Each desktop app process starts
+with an empty registry; no branch state is persisted. Vitality must be 0–1,
+harm must be zero for admission, vitality boosts are bounded, and the registry
+is capped at 512 branches. Pruning removes only simulator entries; harmless
+pruned branch metadata is kept in a bounded in-memory compost archive.
+`aether-quantum-diagnostics` now includes a self-check of the admission,
+pruning, compost, and zero-harm invariants.
 
 The optional `aether_engine.secure_vault.JesterShieldVault` encrypts strings
 with Fernet and requires an access token supplied by the caller. Install its

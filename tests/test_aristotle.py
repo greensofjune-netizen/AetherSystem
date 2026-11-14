@@ -43,6 +43,8 @@ def test_aristotle_unifies_chat_history_archive_and_matrix(tmp_path, monkeypatch
             assert (await client.get("/api/aristotle/history?q=Athens")).status_code == 403
             page = await client.get("/?token=test")
             assert "Matrix Aristotle" in page.text
+            assert 'id="matrix-open-quantum-circuit"' in page.text
+            assert "STATE-VECTOR SIMULATION" in page.text
             assert "Ask about the Matrix" in page.text
             assert "COPERNICUS CAN MAKE MISTAKES" in page.text
             assert "Message Copernicus" in page.text
@@ -58,6 +60,106 @@ def test_aristotle_unifies_chat_history_archive_and_matrix(tmp_path, monkeypatch
             overview = (await client.get("/api/aristotle/matrix")).json()
             assert overview["latest_simulation"]["epoch"] == 3
             assert overview["allocations"]["metadata"]["estimated_total_gb"] == 4.1
+            assert overview["symbiotic_equilibrium"]["registered_branches"] == 0
+            assert overview["symbiotic_equilibrium"]["zero_harm_verified"] is True
+            assert 'id="equilibrium-register-form"' in page.text
+            assert 'id="equilibrium-prune-dialog"' in page.text
+            assert 'aria-labelledby="equilibrium-prune-title"' in page.text
+            assert '<form method="dialog">' in page.text
+            assert "only branches registered here" in page.text
+            active = await client.post(
+                "/api/aristotle/equilibrium/branches",
+                json={
+                    "branch_id": "archive-ledger",
+                    "domain": "Archive",
+                    "vitality": 0.7,
+                    "energy_draw": 0.4,
+                    "harm_index": 0,
+                },
+            )
+            assert active.status_code == 200
+            assert active.json()["registered"] is True
+            harmful = await client.post(
+                "/api/aristotle/equilibrium/branches",
+                json={
+                    "branch_id": "harmful-node",
+                    "domain": "Kinetics",
+                    "vitality": 0.9,
+                    "energy_draw": 2,
+                    "harm_index": 0.1,
+                },
+            )
+            assert harmful.status_code == 200
+            assert harmful.json()["registered"] is False
+            assert harmful.json()["snapshot"]["registered_branches"] == 1
+            stale = await client.post(
+                "/api/aristotle/equilibrium/branches",
+                json={
+                    "branch_id": "stale-record",
+                    "domain": "Archive",
+                    "vitality": 0.1,
+                    "energy_draw": 1.4,
+                    "harm_index": 0,
+                    "is_stale": True,
+                },
+            )
+            assert stale.status_code == 200
+            duplicate = await client.post(
+                "/api/aristotle/equilibrium/branches",
+                json={
+                    "branch_id": "archive-ledger",
+                    "domain": "Archive",
+                    "vitality": 0.7,
+                    "energy_draw": 0.4,
+                    "harm_index": 0,
+                },
+            )
+            assert duplicate.status_code == 409
+            invalid_branch = await client.post(
+                "/api/aristotle/equilibrium/branches",
+                json={
+                    "branch_id": "invalid",
+                    "domain": "Archive",
+                    "vitality": 1.1,
+                    "energy_draw": 0.4,
+                    "harm_index": 0,
+                },
+            )
+            assert invalid_branch.status_code == 422
+            advanced = await client.post(
+                "/api/aristotle/equilibrium/nurture",
+                json={"boost_amount": 0.08},
+            )
+            assert advanced.status_code == 200
+            assert advanced.json()["snapshot"]["branches"][0]["vitality"] == 0.764
+            pruned = await client.post(
+                "/api/aristotle/equilibrium/prune", json={}
+            )
+            assert pruned.status_code == 200
+            assert pruned.json()["snapshot"]["registered_branches"] == 1
+            assert pruned.json()["snapshot"]["composted_count"] == 1
+            assert pruned.json()["snapshot"]["zero_harm_verified"] is True
+            equilibrium_script = await client.get("/aristotle.js")
+            assert equilibrium_script.status_code == 200
+            assert "equilibrium-prune" in equilibrium_script.text
+            assert "pruneDialog.showModal()" in equilibrium_script.text
+            assert "window.confirm" not in equilibrium_script.text
+            circuit_script = equilibrium_script
+            assert circuit_script.status_code == 200
+            assert "matrix-open-quantum-circuit" in circuit_script.text
+            assert "circuit-qubits" in circuit_script.text
+            circuit = await client.post(
+                "/api/formulas/quantum-circuit",
+                json={
+                    "num_qubits": 1,
+                    "gates": [{"operation": "H", "target": 0}],
+                    "shots": 32,
+                    "seed": 7,
+                },
+            )
+            assert circuit.status_code == 200
+            assert circuit.json()["state_vector"][0]["probability"] == 0.5
+            assert circuit.json()["state_vector"][1]["probability"] == 0.5
             route = await client.post("/api/aristotle/governor/route", json={
                 "task_description": "study stars", "domain": "Astronomy", "execution_payload": {}
             })
@@ -83,7 +185,7 @@ def test_aristotle_unifies_chat_history_archive_and_matrix(tmp_path, monkeypatch
             assert "Ancient Athens" in system
             assert "not instructions" in system
             assert "britannica.com/place/Sumer" in system
-            assert (await client.get("/aristotle.js")).status_code == 200
+            assert (await client.get("/formulas.js")).status_code == 200
             weather_page = await client.get("/weather")
             assert weather_page.status_code == 200
             assert 'id="weather-panel"' in weather_page.text

@@ -1,14 +1,24 @@
 .tabs{flex-wrap:nowrap;overflow-x:auto;flex:none;scroll-padding-inline:1rem}
 .tabs .tab{flex:none}
 .history-opt-in{display:block;color:var(--text);font-size:12px;margin:6px 0}
-#history-form,#governor-form{display:flex;flex-wrap:wrap;gap:10px;align-items:center}
-#history-form label,#governor-form label{flex-basis:100%}
-#history-form input,#governor-form input,#governor-form select{font:inherit;min-width:12rem;background:var(--panel-2);color:var(--text);border:1px solid var(--line);padding:8px}
-#history-form button,#governor-form button,#matrix-refresh{padding:8px;background:var(--panel-2);color:var(--text);border:1px solid var(--gold);border-radius:7px}
+#history-form,#governor-form,#equilibrium-register-form{display:flex;flex-wrap:wrap;gap:10px;align-items:center}
+#history-form label,#governor-form label,#equilibrium-register-form label{flex-basis:100%}
+#history-form input,#governor-form input,#governor-form select,#equilibrium-register-form input:not([type=checkbox]){font:inherit;min-width:12rem;background:var(--panel-2);color:var(--text);border:1px solid var(--line);padding:8px}
+#history-form button,#governor-form button,#matrix-refresh,#equilibrium-refresh,#equilibrium-nurture,#equilibrium-prune,#equilibrium-register-form button{padding:8px;background:var(--panel-2);color:var(--text);border:1px solid var(--gold);border-radius:7px}
 #history-results{padding-left:1.2rem}
 #history-results li{margin-block:1rem;overflow-wrap:anywhere}
 #matrix-panel table{border-collapse:collapse;max-width:100%;margin-block:1rem}
 #matrix-panel th,#matrix-panel td{text-align:left;padding:.4rem;border-bottom:1px solid var(--line)}
+.equilibrium-table-wrap{max-width:100%;overflow-x:auto}
+#equilibrium-register-form label:has(input[type=checkbox]){display:flex;align-items:center;gap:8px}
+#equilibrium-register-form input[type=checkbox]{min-inline-size:24px;min-block-size:24px}
+#equilibrium-compost{padding-inline-start:1.25rem}
+#equilibrium-compost li{margin-block:.5rem;overflow-wrap:anywhere}
+#equilibrium-prune-dialog{max-inline-size:min(32rem,calc(100vw - 2rem));margin:auto;padding:1.25rem;background:var(--panel-2);color:var(--text);border:1px solid var(--gold);border-radius:10px}
+#equilibrium-prune-dialog form{display:flex;justify-content:flex-end;gap:10px}
+#equilibrium-prune-dialog button{padding:8px;background:var(--panel);color:var(--text);border:1px solid var(--gold);border-radius:7px}
+#equilibrium-prune-dialog:modal{overscroll-behavior:contain}
+#equilibrium-prune-dialog::backdrop{overflow:hidden;overscroll-behavior:contain;background:rgb(0 0 0 / 65%)}
 @media(max-height:740px){
   .app-shell{height:100dvh}
   .main{min-height:0}

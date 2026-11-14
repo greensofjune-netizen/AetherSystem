@@ -369,6 +369,72 @@ def test_galileo_formula_lab_uses_existing_calculators(tmp_path):
             assert los.status_code == 200
             assert los.json()["distance_km"] > 0
             assert "fresnel_60pct_clearance_m" in los.json()
+            extended_los = await client.post(
+                "/api/formulas/los-link",
+                json={
+                    "tx_lat": 34,
+                    "tx_lon": -117,
+                    "tx_height_m": 10,
+                    "rx_lat": 34.01,
+                    "rx_lon": -117,
+                    "rx_height_m": 10,
+                    "freq_ghz": 5.8,
+                    "path_profile": [
+                        {"distance_fraction": 0, "terrain_elevation_m": 0},
+                        {
+                            "distance_fraction": 0.5,
+                            "terrain_elevation_m": 0,
+                            "building_height_m": 25,
+                        },
+                        {"distance_fraction": 1, "terrain_elevation_m": 0},
+                    ],
+                    "weather": {
+                        "rain_rate_mm_h": 20,
+                        "rain_path_km": 0.5,
+                        "polarization": "H",
+                    },
+                    "radio": {
+                        "tx_power_dbm": 20,
+                        "rx_sensitivity_dbm": -90,
+                        "tx_antenna": {
+                            "peak_gain_dbi": 12,
+                            "azimuth_deg": 0,
+                            "elevation_deg": 0,
+                            "azimuth_beamwidth_deg": 60,
+                            "elevation_beamwidth_deg": 30,
+                        },
+                        "rx_antenna": {
+                            "peak_gain_dbi": 12,
+                            "azimuth_deg": 180,
+                            "elevation_deg": 0,
+                            "azimuth_beamwidth_deg": 60,
+                            "elevation_beamwidth_deg": 30,
+                        },
+                    },
+                },
+            )
+            assert extended_los.status_code == 200
+            assert extended_los.json()["dominant_obstacle_type"] == "BUILDING"
+            assert extended_los.json()["knife_edge_diffraction_loss_db"] > 0
+            assert extended_los.json()["weather_attenuation_db"] > 0
+            assert extended_los.json()["received_signal_strength_dbm"] is not None
+            assert extended_los.json()["link_margin_db"] is not None
+            invalid_profile = await client.post(
+                "/api/formulas/los-link",
+                json={
+                    "tx_lat": 34,
+                    "tx_lon": -117,
+                    "tx_height_m": 10,
+                    "rx_lat": 34.01,
+                    "rx_lon": -117,
+                    "rx_height_m": 10,
+                    "path_profile": [
+                        {"distance_fraction": 0.2, "terrain_elevation_m": 0},
+                        {"distance_fraction": 1, "terrain_elevation_m": 0},
+                    ],
+                },
+            )
+            assert invalid_profile.status_code == 422
             invalid_los = await client.post(
                 "/api/formulas/los-link",
                 json={

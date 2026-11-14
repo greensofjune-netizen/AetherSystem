@@ -19,6 +19,11 @@ from history_matrix_archive import UniversalHistoryArchive
 
 from .astronomy_engine import get_astronomy_engine
 from .model_providers import ChatTool, ToolCall
+from .symbiotic_equilibrium import (
+    BranchAlreadyRegisteredError,
+    SymbioticEquilibriumEngine,
+    SystemBranch,
+)
 
 LOGGER = logging.getLogger(__name__)
 
@@ -285,6 +290,9 @@ def render_index(path: Path) -> str:
         '<h2 id="matrix-heading">Matrix actions</h2>',
         '''<h2 id="matrix-heading">Matrix engine</h2>
           <p>System telemetry is simulated; the governor does not execute agents or measure memory.</p>
+          <h3 id="matrix-circuit-heading">State-vector circuit</h3>
+          <p>Open the local Formula Lab simulator for exact small-circuit math and seeded measurement samples. It does not model quantum hardware noise and is capped at 12 qubits.</p>
+          <button type="button" class="voice-button" id="matrix-open-quantum-circuit">Open circuit simulator</button>
           <button type="button" id="matrix-refresh">Refresh engine overview</button>
           <p id="matrix-overview" role="status"></p>
           <table><caption>Illustrative agent memory estimates</caption>
@@ -299,6 +307,50 @@ def render_index(path: Path) -> str:
             <button type="submit">Simulate routing</button>
           </form>
           <p id="governor-result" role="status"></p>''',
+    )
+    text = text.replace(
+        '<p>System telemetry is simulated; the governor does not execute agents or measure memory.</p>',
+        '''<p>System telemetry is simulated; the governor does not execute agents or measure memory.</p>
+          <section aria-labelledby="equilibrium-heading">
+            <h3 id="equilibrium-heading">Symbiotic equilibrium</h3>
+            <p>This in-memory blueprint manages only branches registered here. It never deletes or changes project files, archives, or live services. A harmful branch is rejected; pruning removes only simulator entries and composts harmless ones.</p>
+            <form id="equilibrium-register-form" aria-label="Register an equilibrium branch">
+              <label for="equilibrium-branch-id">Branch ID</label>
+              <input id="equilibrium-branch-id" maxlength="100" required>
+              <label for="equilibrium-domain">Domain</label>
+              <input id="equilibrium-domain" maxlength="80" required>
+              <label for="equilibrium-vitality">Vitality (0–1)</label>
+              <input id="equilibrium-vitality" type="number" min="0" max="1" step="any" value="0.7" required>
+              <label for="equilibrium-energy">Energy draw (non-negative)</label>
+              <input id="equilibrium-energy" type="number" min="0" step="any" value="0.4" required>
+              <label for="equilibrium-harm">Harm index (must be 0)</label>
+              <input id="equilibrium-harm" type="number" min="0" step="any" value="0" required>
+              <label><input id="equilibrium-stale" type="checkbox"> Mark as stale</label>
+              <button type="submit">Register branch</button>
+            </form>
+            <p id="equilibrium-status" role="status" aria-live="polite"></p>
+            <p id="equilibrium-summary"></p>
+            <button type="button" id="equilibrium-refresh">Refresh equilibrium</button>
+            <button type="button" id="equilibrium-nurture">Advance vitality</button>
+            <button type="button" id="equilibrium-prune">Prune stale or below-floor branches</button>
+            <div class="equilibrium-table-wrap">
+              <table>
+                <caption>Branches in this in-memory simulator</caption>
+                <thead><tr><th scope="col">Branch</th><th scope="col">Domain</th><th scope="col">Vitality</th><th scope="col">Energy draw</th><th scope="col">Harm</th><th scope="col">State</th></tr></thead>
+                <tbody id="equilibrium-branches"></tbody>
+              </table>
+            </div>
+            <h4>Compost archive</h4>
+            <ul id="equilibrium-compost"></ul>
+          </section>
+          <dialog id="equilibrium-prune-dialog" aria-labelledby="equilibrium-prune-title">
+            <h3 id="equilibrium-prune-title">Prune simulator branches?</h3>
+            <p>Only stale or below-floor entries in this in-memory simulator will be removed. Project files, archives, and live services will not be changed.</p>
+            <form method="dialog">
+              <button value="cancel" autofocus>Cancel</button>
+              <button value="prune">Prune branches</button>
+            </form>
+          </dialog>''',
     )
     text = text.replace(
         "Chat history and selected text/images are saved locally and sent only to local Ollama.",
@@ -331,8 +383,24 @@ class GovernorRequest(BaseModel):
     execution_payload: dict[str, Any]
 
 
+class EquilibriumBranchRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    branch_id: str = Field(min_length=1, max_length=100)
+    domain: str = Field(min_length=1, max_length=80)
+    vitality: float = Field(strict=True, ge=0, le=1, allow_inf_nan=False)
+    energy_draw: float = Field(strict=True, ge=0, allow_inf_nan=False)
+    harm_index: float = Field(strict=True, ge=0, allow_inf_nan=False)
+    is_stale: bool = Field(default=False, strict=True)
+
+
+class EquilibriumNurtureRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    boost_amount: float = Field(default=0.08, strict=True, ge=0, le=1, allow_inf_nan=False)
+
+
 def install_aristotle_routes(app: FastAPI, project: Path) -> None:
     governor = AgentGovernor()
+    equilibrium = SymbioticEquilibriumEngine()
 
     @app.get("/api/aristotle/history")
     def search_history(q: str = Query(min_length=1, max_length=200)) -> dict[str, Any]:
@@ -342,7 +410,51 @@ def install_aristotle_routes(app: FastAPI, project: Path) -> None:
 
     @app.get("/api/aristotle/matrix")
     def matrix_overview() -> dict[str, Any]:
-        return read_matrix_overview(project, governor)
+        return {
+            **read_matrix_overview(project, governor),
+            "symbiotic_equilibrium": equilibrium.system_health_report(),
+        }
+
+    @app.get("/api/aristotle/equilibrium")
+    def equilibrium_report() -> dict[str, Any]:
+        return equilibrium.system_health_report()
+
+    @app.post("/api/aristotle/equilibrium/branches")
+    def equilibrium_register(entry: EquilibriumBranchRequest) -> dict[str, Any]:
+        try:
+            registered = equilibrium.register_branch(
+                SystemBranch(
+                    branch_id=entry.branch_id,
+                    domain=entry.domain,
+                    vitality=entry.vitality,
+                    energy_draw=entry.energy_draw,
+                    harm_index=entry.harm_index,
+                    is_stale=entry.is_stale,
+                )
+            )
+        except BranchAlreadyRegisteredError as error:
+            raise HTTPException(409, str(error)) from error
+        except ValueError as error:
+            raise HTTPException(422, str(error)) from error
+        return {
+            "registered": registered,
+            "snapshot": equilibrium.system_health_report(),
+        }
+
+    @app.post("/api/aristotle/equilibrium/nurture")
+    def equilibrium_nurture(entry: EquilibriumNurtureRequest) -> dict[str, Any]:
+        try:
+            notes = equilibrium.nurture_and_advance(entry.boost_amount)
+        except ValueError as error:
+            raise HTTPException(422, str(error)) from error
+        return {"notes": notes, "snapshot": equilibrium.system_health_report()}
+
+    @app.post("/api/aristotle/equilibrium/prune")
+    def equilibrium_prune() -> dict[str, Any]:
+        return {
+            "notes": equilibrium.prune_and_compost(),
+            "snapshot": equilibrium.system_health_report(),
+        }
 
     @app.post("/api/aristotle/governor/route")
     def route_governor(entry: GovernorRequest) -> dict[str, Any]:

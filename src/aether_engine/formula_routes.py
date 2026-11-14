@@ -6,7 +6,12 @@ from fastapi import APIRouter, HTTPException, Request
 from pydantic import BaseModel, ConfigDict, Field
 
 from .engine_core import EngineCapability, EngineOrchestrator
-from .los_link import calculate_los_link_budget
+from .los_link import (
+    PathProfilePoint,
+    RadioLinkParameters,
+    WeatherConditions,
+    calculate_los_link_budget,
+)
 from .quantum_engine import (
     MAX_CIRCUIT_GATES,
     MAX_CIRCUIT_QUBITS,
@@ -58,6 +63,9 @@ class LosLinkFormulaRequest(FormulaRequest):
     rx_lon: float = Field(ge=-180, le=180, allow_inf_nan=False)
     rx_height_m: float = Field(ge=0, allow_inf_nan=False)
     freq_ghz: float = Field(default=5.8, gt=0, allow_inf_nan=False)
+    path_profile: list[PathProfilePoint] | None = Field(default=None, max_length=512)
+    weather: WeatherConditions | None = None
+    radio: RadioLinkParameters | None = None
 
 
 def _calculate_quantum(entry: QuantumFormulaRequest) -> dict[str, float]:
@@ -115,7 +123,7 @@ def _calculate_spin_network(entry: SpinNetworkFormulaRequest) -> dict[str, float
     }
 
 
-def _calculate_los_link(entry: LosLinkFormulaRequest) -> dict[str, float | str]:
+def _calculate_los_link(entry: LosLinkFormulaRequest) -> dict[str, object]:
     try:
         return calculate_los_link_budget(
             tx_lat=entry.tx_lat,
@@ -125,6 +133,9 @@ def _calculate_los_link(entry: LosLinkFormulaRequest) -> dict[str, float | str]:
             rx_lon=entry.rx_lon,
             rx_height_m=entry.rx_height_m,
             freq_ghz=entry.freq_ghz,
+            path_profile=entry.path_profile,
+            weather=entry.weather,
+            radio=entry.radio,
         )
     except ValueError as error:
         raise HTTPException(422, str(error)) from error
@@ -166,5 +177,5 @@ def spin_network_formula(
 @formula_router.post("/api/formulas/los-link")
 def los_link_formula(
     entry: LosLinkFormulaRequest, request: Request
-) -> dict[str, float | str]:
+) -> dict[str, object]:
     return request.app.state.engine_runtime.execute(LOS_LINK_CAPABILITY, entry)
