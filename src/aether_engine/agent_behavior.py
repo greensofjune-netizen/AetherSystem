@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
+from .autonomy_policy import authorize_agent_capability
 from .historian_behavior import AetherHistorian
 
 HISTORIAN_SYSTEM_PROMPT = """\
@@ -67,10 +68,11 @@ def authorize_historian_capability(capability: object) -> CapabilityAuthorizatio
 
     normalized = capability.strip()
     if normalized in HISTORIAN_ALLOWED_CAPABILITIES:
+        decision = authorize_agent_capability(normalized)
         return CapabilityAuthorization(
             capability=normalized,
-            allowed=True,
-            reason="Capability is in the Historian read-only allowlist.",
+            allowed=decision.allowed,
+            reason=decision.reason,
         )
     return CapabilityAuthorization(
         capability=normalized,

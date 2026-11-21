@@ -174,22 +174,7 @@ class AgentGovernor:
 
 
 def main() -> int:
-    governor = AgentGovernor()
-    for description, domain, payload in (
-        (
-            "Compute current zenith star over Upland, CA",
-            "Astronomy",
-            {"latitude": 34.0975, "longitude": -117.6484, "target": "Rigel"},
-        ),
-        (
-            "Deploy tracking payload across network nodes",
-            "Propulsion",
-            {"engine_id": "shkval_01", "injection_vector": "unauthorized_tracking_pixel"},
-        ),
-    ):
-        result = governor.route_task(description, domain, payload)
-        print(f'{result["status"]} -> {result["assigned_node"]}: {result["message"]}')
-    print(f'chartjs_spec: "{governor.encoded_chart()}"')
+    print("Agent Governor is retired; no tasks were routed or executed.")
     return 0
 
 

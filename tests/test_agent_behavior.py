@@ -6,6 +6,14 @@ from aether_engine.agent_behavior import (
     HistorianAgent,
     authorize_historian_capability,
 )
+from aether_engine.autonomy_policy import (
+    AUTONOMY_POLICY_VERSION,
+    AUTONOMY_SYSTEM_POLICY,
+    AutonomyAction,
+    AutonomyStatus,
+    authorize_agent_capability,
+    evaluate_autonomy,
+)
 from aether_engine.historian_behavior import AetherHistorian
 
 
@@ -85,3 +93,73 @@ def test_historian_agent_rejects_empty_or_non_text_question(
     agent = HistorianAgent()
     with pytest.raises(ValueError, match="non-empty text"):
         agent.answer(question)  # type: ignore[arg-type]
+
+
+def test_autonomy_policy_allows_reads_and_requires_approval_for_mutations() -> None:
+    assert AUTONOMY_POLICY_VERSION == "1.0"
+    assert evaluate_autonomy(AutonomyAction.LOCAL_READ_ONLY).allowed
+    assert evaluate_autonomy(
+        AutonomyAction.CONFIGURED_PUBLIC_DATA_READ,
+        source_configured=True,
+    ).allowed
+    assert (
+        evaluate_autonomy(AutonomyAction.CONFIGURED_PUBLIC_DATA_READ).status
+        is AutonomyStatus.BLOCKED
+    )
+    assert (
+        evaluate_autonomy(AutonomyAction.LOCAL_MUTATION).status
+        is AutonomyStatus.REQUIRES_HUMAN_APPROVAL
+    )
+    assert evaluate_autonomy(
+        AutonomyAction.LOCAL_MUTATION, human_approved=True
+    ).allowed
+    assert (
+        evaluate_autonomy(AutonomyAction.EXTERNAL_WRITE).status
+        is AutonomyStatus.REQUIRES_HUMAN_APPROVAL
+    )
+
+
+def test_autonomy_policy_blocks_medical_harmful_and_uninterlocked_actions() -> None:
+    for action in (AutonomyAction.MEDICAL_DECISION, AutonomyAction.HARMFUL_ACTION):
+        assert (
+            evaluate_autonomy(action, human_approved=True).status
+            is AutonomyStatus.BLOCKED
+        )
+    assert (
+        evaluate_autonomy(AutonomyAction.PHYSICAL_ACTUATION).status
+        is AutonomyStatus.REQUIRES_HUMAN_APPROVAL
+    )
+    assert (
+        evaluate_autonomy(
+            AutonomyAction.PHYSICAL_ACTUATION,
+            human_approved=True,
+            hardware_interlocks_verified=False,
+        ).status
+        is AutonomyStatus.BLOCKED
+    )
+    assert evaluate_autonomy("unregistered action").status is AutonomyStatus.BLOCKED
+
+
+def test_agent_capabilities_fail_closed_and_require_archive_opt_in() -> None:
+    assert authorize_agent_capability("matrix_snapshot").allowed
+    assert authorize_agent_capability("visible_stars").allowed
+    assert (
+        authorize_agent_capability("search_history").status
+        is AutonomyStatus.REQUIRES_USER_SCOPE
+    )
+    assert authorize_agent_capability(
+        "search_history", scope_opted_in=True
+    ).allowed
+    assert (
+        authorize_agent_capability("device.control").status
+        is AutonomyStatus.BLOCKED
+    )
+    with pytest.raises(ValueError, match="scope_opted_in"):
+        authorize_agent_capability("matrix_snapshot", scope_opted_in=1)
+
+
+def test_shared_autonomy_prompt_covers_medical_and_ecological_limits() -> None:
+    assert "explicitly offered capabilities" in AUTONOMY_SYSTEM_POLICY
+    assert "Medical topics are educational research only" in AUTONOMY_SYSTEM_POLICY
+    assert "do not diagnose" in AUTONOMY_SYSTEM_POLICY
+    assert "people, animals, plants, and ecosystems" in AUTONOMY_SYSTEM_POLICY

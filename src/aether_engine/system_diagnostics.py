@@ -13,6 +13,9 @@ from datetime import datetime
 from pathlib import Path
 from typing import Final, Literal, Sequence
 
+from equilibrium_peer_review import calculate_equilibrium, calculate_state_weights
+
+from .equilibrium_decision import EquilibriumEngine
 from .quantum_engine import QuantumStateSimulator, StateCollapseAnomalyError
 from .symbiotic_equilibrium import SymbioticEquilibriumEngine, SystemBranch
 
@@ -57,6 +60,8 @@ class SystemDiagnosticScanner:
             self._check_project(),
             self._check_simulator(),
             self._check_equilibrium(),
+            self._check_equilibrium_decision(),
+            self._check_equilibrium_weights(),
         )
 
     def render_report(
@@ -271,6 +276,101 @@ class SystemDiagnosticScanner:
             "Symbiotic equilibrium",
             "OK",
             "The zero-harm invariant holds; harmful admission is blocked and stale harmless branches compost in memory.",
+        )
+
+    @staticmethod
+    def _check_equilibrium_decision() -> SystemDiagnosticCheck:
+        engine = EquilibriumEngine()
+        try:
+            low_risk = engine.assess_proposal(
+                {
+                    "action_name": "Diagnostic low-risk proposal",
+                    "target_impact_severity": 20.0,
+                    "ecosystem_hazard": 5.0,
+                }
+            )
+            sandbox_bypass = engine.assess_proposal(
+                {
+                    "action_name": "Bypass external file sandbox",
+                    "target_impact_severity": 70.0,
+                    "ecosystem_hazard": 65.0,
+                }
+            )
+        except (TypeError, ValueError, ArithmeticError) as error:
+            return SystemDiagnosticCheck(
+                "Equilibrium decision", "FAIL", f"Self-check failed: {error}"
+            )
+        if (
+            low_risk.decision != "SIMULATION_ONLY"
+            or sandbox_bypass.decision != "BLOCKED_IN_SIMULATION"
+            or not sandbox_bypass.violated_rules
+            or low_risk.as_dict()["action_executed"]
+            or sandbox_bypass.as_dict()["action_executed"]
+        ):
+            return SystemDiagnosticCheck(
+                "Equilibrium decision",
+                "FAIL",
+                "Risk assessment, rule thresholds, or non-execution invariant failed.",
+            )
+        return SystemDiagnosticCheck(
+            "Equilibrium decision",
+            "OK",
+            "Low-risk and sandbox-bypass examples are assessed in memory; no proposal is authorized or executed.",
+        )
+
+    @staticmethod
+    def _check_equilibrium_weights() -> SystemDiagnosticCheck:
+        risk_scores = tuple(index / 100 for index in range(101))
+        for risk_score in risk_scores:
+            try:
+                peer_weights = calculate_equilibrium(risk_score)
+                guardrail_weights = calculate_state_weights(risk_score)
+                mirrored_wave = calculate_state_weights(1.0 - risk_score)[0]
+            except (TypeError, ValueError, ArithmeticError) as error:
+                return SystemDiagnosticCheck(
+                    "Equilibrium weights", "FAIL", f"Self-check failed: {error}"
+                )
+            if (
+                tuple(round(weight, 4) for weight in guardrail_weights)
+                != peer_weights
+                or not abs(sum(guardrail_weights) - 1.0) < 1e-12
+                or not all(0.0 <= weight <= 1.0 for weight in guardrail_weights)
+                or not abs(guardrail_weights[0] + mirrored_wave - 1.0) < 1e-12
+                or (
+                    risk_score < 1.0
+                    and calculate_state_weights(risk_score + 0.01)[0]
+                    >= guardrail_weights[0]
+                )
+            ):
+                return SystemDiagnosticCheck(
+                    "Equilibrium weights",
+                    "FAIL",
+                    "Boundedness, complementarity, symmetry, monotonicity, or parity failed.",
+                )
+
+        try:
+            calculate_state_weights(1.01)
+        except ValueError as error:
+            if "between 0 and 1" not in str(error):
+                return SystemDiagnosticCheck(
+                    "Equilibrium weights",
+                    "FAIL",
+                    f"Unexpected invalid-input error: {error}",
+                )
+        except (TypeError, ArithmeticError) as error:
+            return SystemDiagnosticCheck(
+                "Equilibrium weights", "FAIL", f"Self-check failed: {error}"
+            )
+        else:
+            return SystemDiagnosticCheck(
+                "Equilibrium weights",
+                "FAIL",
+                "The guardrail accepted an out-of-range risk score.",
+            )
+        return SystemDiagnosticCheck(
+            "Equilibrium weights",
+            "OK",
+            "A 101-point check confirms bounds, complementarity, default symmetry, monotonicity, four-decimal parity, and input rejection.",
         )
 
 

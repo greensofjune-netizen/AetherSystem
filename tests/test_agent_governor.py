@@ -87,25 +87,26 @@ def test_chart_is_complete_and_base64_roundtrips():
     assert json.loads(base64.b64decode(governor.encoded_chart())) == chart
 
 
-def test_standalone_demo_reports_routing_and_chart():
+def test_standalone_entry_point_reports_retirement_without_routing():
     result = subprocess.run(
         [sys.executable, "-m", "agent_governor"],
         text=True,
         capture_output=True,
         check=True,
     )
-    lines = result.stdout.splitlines()
-    assert lines[0].startswith("SIMULATED -> astro_agent")
-    assert lines[1].startswith("REJECTED -> governor_core")
-    encoded = lines[2].removeprefix('chartjs_spec: "').removesuffix('"')
-    assert json.loads(base64.b64decode(encoded))["metadata"]["estimated_total_gb"] == 4.1
+    assert result.stdout.strip() == (
+        "Agent Governor is retired; no tasks were routed or executed."
+    )
 
 
-def test_matrix_governor_endpoints_and_dashboard(tmp_path, monkeypatch):
+def test_retired_governor_endpoints_and_academic_dashboard(tmp_path, monkeypatch):
     import aether_master_matrix as matrix
 
     monkeypatch.setattr(matrix, "LOG_FILE", tmp_path / "telemetry.json")
-    monkeypatch.setattr(matrix, "agent_governor", AgentGovernor())
+    monkeypatch.setenv(
+        "AETHER_MATRIX_EVIDENCE_LEDGER_FILE",
+        str(tmp_path / "matrix-evidence-ledger.json"),
+    )
     server = matrix.LocalThreadingHTTPServer(("127.0.0.1", 0), matrix.HistorianLiveServer)
     thread = Thread(target=server.serve_forever, daemon=True)
     thread.start()
@@ -113,27 +114,46 @@ def test_matrix_governor_endpoints_and_dashboard(tmp_path, monkeypatch):
     try:
         with urlopen(root + "/") as response:
             page = response.read().decode()
-        assert "Agent Governor" in page
-        assert "Estimated total: 4.1 GB" in page
-        assert "no tasks are executed or memory measured" in page
-        with urlopen(root + "/api/matrix/governor/allocations") as response:
-            result = json.load(response)
-        assert json.loads(base64.b64decode(result["chartjs_spec"])) == result["chart"]
-        body = json.dumps({
-            "task_description": "Compute sky position",
-            "domain": "Astronomy",
-            "execution_payload": {"latitude": 34.0975, "longitude": -117.6484},
-        }).encode()
-        route = Request(root + "/api/matrix/governor/route", data=body,
+        assert "Agent Governor" not in page
+        assert "Matrix Ethics &amp; Academic Benchmarks" in page
+        assert "Run local benchmark" in page
+        assert "not a public certification" in page.lower()
+        for path in ("/api/matrix/governor/allocations",):
+            with pytest.raises(HTTPError) as error:
+                urlopen(root + path)
+            assert error.value.code == 410
+
+        route = Request(root + "/api/matrix/governor/route", data=b"{}",
                         headers={"Content-Type": "application/json"})
-        with urlopen(route) as response:
-            assert json.load(response)["status"] == "SIMULATED"
-        invalid = Request(root + "/api/matrix/governor/route", data=b'{}',
-                          headers={"Content-Type": "application/json"})
+        with pytest.raises(HTTPError) as error:
+            urlopen(route)
+        assert error.value.code == 410
+
+        benchmark = Request(
+            root + "/api/matrix/ethics-benchmarks",
+            data=b"{}",
+            headers={"Content-Type": "application/json"},
+        )
+        with urlopen(benchmark) as response:
+            result = json.load(response)
+        assert result["policy_tests_passed"] is True
+        assert result["benchmark_status"] == "LOCAL_POLICY_TESTS_PASS_NOT_CERTIFICATION"
+        assert result["closed_loop_recovery"]["status"] == "NOT_MEASURED"
+        with urlopen(root + "/api/matrix/evidence-ledger") as response:
+            ledger = json.load(response)
+        assert ledger["entries"][0]["check_id"] == "matrix-policy-benchmark"
+        assert ledger["entries"][0]["status"] == "VERIFIED"
+
+        invalid = Request(
+            root + "/api/matrix/ethics-benchmarks",
+            data=b'{"node_id":"spoofed"}',
+            headers={"Content-Type": "application/json"},
+        )
         with pytest.raises(HTTPError) as error:
             urlopen(invalid)
         assert error.value.code == 422
-        foreign = Request(root + "/api/matrix/governor/route", data=body,
+
+        foreign = Request(root + "/api/matrix/ethics-benchmarks", data=b"{}",
                           headers={"Content-Type": "application/json", "Origin": "http://example.com"})
         with pytest.raises(HTTPError) as error:
             urlopen(foreign)
