@@ -9,8 +9,6 @@ import sqlite3
 from pathlib import Path
 from typing import Any
 
-from .los_link import calculate_los_link_budget, publish_telemetry_to_aether
-
 ARTS_MODE_PROFILES = {
     "MUSIC": {
         "description": "Lossless concert or studio audio session",
@@ -31,6 +29,15 @@ _MATRIX_ARTS_EVENTS = {
     "ARTS_SESSION_PLANNED",
     "ARTS_STAGE_CUE_REQUESTED",
 }
+
+
+async def publish_telemetry_to_aether(
+    event_name: str, payload: dict[str, Any]
+) -> dict[str, Any]:
+    """Load the optional radio transport only when telemetry is published."""
+    from .los_link import publish_telemetry_to_aether as publish
+
+    return await publish(event_name, payload)
 
 
 def latest_matrix_arts_telemetry(
@@ -107,6 +114,8 @@ def prepare_arts_session(
     if not isinstance(title, str) or not title.strip() or len(title) > 200:
         raise ValueError("title must contain 1 to 200 non-whitespace characters.")
 
+    from .los_link import calculate_los_link_budget
+
     link_budget = calculate_los_link_budget(
         tx_lat=tx_lat,
         tx_lon=tx_lon,
@@ -136,6 +145,7 @@ async def publish_arts_session(plan: dict[str, Any]) -> dict[str, Any]:
         "media_relay_started"
     ) is not False:
         raise ValueError("Only a non-started arts session plan can be published.")
+
     return await publish_telemetry_to_aether("ARTS_SESSION_PLANNED", plan)
 
 
@@ -164,4 +174,5 @@ async def request_stage_cue(
         "status": "REQUIRES_OPERATOR_APPROVAL",
         "actuated": False,
     }
+
     return await publish_telemetry_to_aether("ARTS_STAGE_CUE_REQUESTED", payload)

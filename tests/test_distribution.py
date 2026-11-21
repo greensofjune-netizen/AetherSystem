@@ -45,12 +45,27 @@ def test_distribution_is_licensed_and_core_runs_without_extras(tmp_path: Path) -
 
     with ZipFile(wheel) as archive:
         names = archive.namelist()
+        assert "food_matrix_streamer.py" in names
+        assert "equilibrium_peer_review.py" in names
+        assert "aether_engine/equilibrium_decision.py" in names
         assert not any(
             ".sqlite" in name
             or name.endswith((".pkg", ".gguf", ".log", ".jsonl", ".pyc"))
             for name in names
         )
         metadata_path = next(name for name in names if name.endswith("/METADATA"))
+        entry_points_path = next(
+            name for name in names if name.endswith("/entry_points.txt")
+        )
+        entry_points = archive.read(entry_points_path).decode("utf-8")
+        assert (
+            "aether-equilibrium-review = "
+            "aether_engine.equilibrium_decision:main"
+        ) in entry_points
+        assert (
+            "aether-equilibrium-weights = "
+            "equilibrium_peer_review:main"
+        ) in entry_points
         for asset in ("index.html", "monitor_tasks.js", "aether_client.js"):
             asset_path = next(
                 name for name in names
@@ -101,6 +116,64 @@ def test_distribution_is_licensed_and_core_runs_without_extras(tmp_path: Path) -
         capture_output=True,
         text=True,
     )
+
+    food_cli = environment / (
+        "Scripts/aether-food-gcode.exe"
+        if os.name == "nt"
+        else "bin/aether-food-gcode"
+    )
+    result = subprocess.run(
+        [str(food_cli), "--help"],
+        cwd=tmp_path,
+        env=process_env,
+        capture_output=True,
+        text=True,
+    )
+    assert result.returncode == 0, result.stderr
+    assert "--steps-per-revolution" in result.stdout
+
+    equilibrium_cli = environment / (
+        "Scripts/aether-equilibrium-review.exe"
+        if os.name == "nt"
+        else "bin/aether-equilibrium-review"
+    )
+    result = subprocess.run(
+        [
+            str(equilibrium_cli),
+            "--action-name",
+            "Packaging check",
+            "--target-impact-severity",
+            "20",
+            "--ecosystem-hazard",
+            "5",
+        ],
+        cwd=tmp_path,
+        env=process_env,
+        capture_output=True,
+        text=True,
+    )
+    assert result.returncode == 0, result.stderr
+    equilibrium = json.loads(result.stdout)
+    assert equilibrium["decision"] == "SIMULATION_ONLY"
+    assert equilibrium["action_executed"] is False
+
+    weights_cli = environment / (
+        "Scripts/aether-equilibrium-weights.exe"
+        if os.name == "nt"
+        else "bin/aether-equilibrium-weights"
+    )
+    result = subprocess.run(
+        [str(weights_cli)],
+        cwd=tmp_path,
+        env=process_env,
+        capture_output=True,
+        text=True,
+    )
+    assert result.returncode == 0, result.stderr
+    assert "Risk Input: 0.15" in result.stdout
+    assert "Risk Input: 0.50" in result.stdout
+    assert "Risk Input: 0.85" in result.stdout
+    assert "does not prove physical wave-particle duality" in result.stdout
 
     def cli(*arguments: str) -> subprocess.CompletedProcess[str]:
         return subprocess.run(
