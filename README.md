@@ -86,6 +86,43 @@ Before publishing:
 
 ## Optional companion experiences
 
+### Private lineage archive
+
+Family photographs, handwritten notes, and unpublished source material should
+not be committed to the public repository. The lineage cataloger inventories
+images, text notes, and documents without modifying them:
+
+```bash
+aether-lineage-archive /path/to/original-archive
+```
+
+By default this writes `.aether-lineage/manifest.json`, which is excluded from
+Git. Every artifact receives a SHA-256 digest, relative path, artifact ID,
+verification status, and an empty `matrix_correlations` list. Duplicate bytes
+are reported, and symbolic links are skipped. The manifest is written with
+owner-only permissions where the platform supports them.
+
+Keep the original files unchanged and make independent encrypted/offline
+backups. For each matrix correlation, classify the relationship explicitly as
+an original source, observation, transcription, simulation, inference,
+measurement, or limitation; keep the initial status `UNVERIFIED` until the
+claim has traceable evidence. The catalog does not perform OCR, infer
+scientific validity, or upload files.
+
+After copying the private archive to its second storage location, verify both
+copies against the original manifest:
+
+```bash
+aether-lineage-archive /path/to/original-archive \
+  --verify-manifest /path/to/manifest.json \
+  --verification-report /path/to/verification-original.json
+```
+
+The verification exits zero only when every supported file matches the recorded
+SHA-256 digest and no tracked file is missing or newly added. This is a byte-level
+preservation test against the manual/current workflow; it is not proof of
+authorship, scientific truth, or physical-media health.
+
 ### Standalone Quantum Light Lab
 
 Open [Quantum Light Lab](./quantum-lab/index.html) directly in a browser for an
@@ -94,6 +131,25 @@ graphs, which-path controls, and entropy/surprisal charts. It has no Aether
 runtime or external dependencies. All results are explicitly simulated, not
 measurements of real quantum entropy. See the [lab guide](./quantum-lab/README.md)
 for the physics model, limitations, controls, and tests.
+
+## Experimental food-path G-code export
+
+`food_matrix_streamer.py` generates a six-fold paste-path template and exports
+it to a file; it has no serial or USB connection and does not send commands to
+the Felix Single or any other printer. The generic output is not validated for
+the printer's firmware, usable workspace, extrusion mechanism, ingredients, or
+food-contact hygiene, and is not certified food-safe. Review and validate the
+file against the printer's documentation before considering any physical use.
+Copernicus is not given a printer-control action.
+
+```bash
+python food_matrix_streamer.py --output star.gcode
+```
+
+The generator is also importable as `generate_edible_star_gcode`; its
+parameters include layer count, radius, layer height, center, path resolution,
+and extrusion per millimeter. No printer connection is opened by either
+interface. The exporter refuses to overwrite an existing destination file.
 
 ## Matrix Aristotle desktop companion
 
@@ -156,11 +212,9 @@ read-only, or the path in `AETHER_HISTORY_ARCHIVE`. A missing archive is reporte
 not created. Archive records are unverified; they enter a chat prompt only when
 you check the archive option for that message. The Matrix view reads simulated
 telemetry from `historian_telemetry_vault.json` (or
-`AETHER_HISTORIAN_LOG_FILE`) and has its own in-process simulated governor;
-it does not control the separate dashboard's governor or enforce hardware
-limits. Copernicus's local Ollama chat receives a fresh, read-only snapshot of
-the latest simulated telemetry and illustrative agent-memory estimates on each
-turn. Its conversational agent can explain that context and suggest next steps,
+`AETHER_HISTORIAN_LOG_FILE`). Copernicus's local Ollama chat receives a fresh,
+read-only snapshot of the latest simulated telemetry on each turn. Its
+conversational agent can explain that context and suggest next steps,
 and can request a read-only Matrix snapshot, calculate visible bright stars for
 explicit coordinates, or, when the history checkbox is selected, search the
 existing local archive. Open the Weather tab to load an Open-Meteo reading and
@@ -189,46 +243,94 @@ The evaluation exercises snapshot and opted-in history tool calls and verifies
 that a test-drive request does not alter the synthetic telemetry. A failure
 identifies an unmet scenario, not a general assessment of a model's abilities.
 
-## Matrix agent governor
+## Matrix Ethics & Academic Benchmarks
 
-The master dashboard includes an **Agent Governor** with simulated Astronomy,
-Propulsion and History routing and a horizontal chart of illustrative memory
-estimates. The default total is 4.1 GB (1.2 + 1.5 + 0.8 + 0.6); 5.3 GB is an
-informational reference only. Nothing is executed, allocated, measured, or
-enforced. The case-insensitive `exploit` / `unauthorized_tracking` keyword
-screen checks the description, domain, and JSON payload, but it is not a
-security control or a guarantee of ethical behavior.
+The simulated Agent Governor and its active routing interfaces have been
+retired. The old loopback API paths return `410 Gone`; Matrix Aristotle no
+longer exposes its simulated route endpoint. The standalone
+`agent_governor.py` prototype remains in the source tree only for historical
+regression tests and is not included in the installed package.
 
-On the running loopback Matrix dashboard, `GET /api/matrix/governor/allocations`
-returns both `chart` and a Base64-encoded JSON `chartjs_spec`.
-`POST /api/matrix/governor/route` accepts JSON fields `task_description`,
-`domain`, and `execution_payload`. Results are `SIMULATED`, `REJECTED`, or
-`UNROUTABLE`; the bounded in-memory log holds outcomes and node IDs, not
-submitted descriptions or payloads, and is reset on restart.
+The master dashboard and Matrix Aristotle include an opt-in **Ethics & Academic
+Benchmarks** run. It checks a bounded, versioned set of explicit autonomy-policy
+cases and times a deterministic synthetic SHA-256 workload on the current host.
+Its report labels physical recovery as `NOT_MEASURED`, hardware measurements as
+`NOT_PERFORMED`, and certification as `NOT_A_CERTIFICATION`. The reproducibility
+digest covers deterministic test evidence; the report integrity digest is not a
+signature, identity proof, independent replication, or truth guarantee.
+Run it from the dashboard or use `POST /api/matrix/ethics-benchmarks` on the
+loopback master server and `POST /api/aristotle/academic-benchmarks` in Matrix
+Aristotle. Both entry points write a redacted result to the shared local
+evidence ledger, which can also be read from `/api/aristotle/evidence-ledger`.
 
-In the master dashboard's Copernicus and Stargazer chat views, each valid
-submitted prompt is screened and sent to the governor using simple local
-keyword-based domain inference. Prompts matching multiple domains or none are
-shown as unroutable rather than guessed. The chat displays the simulated route,
-verification against the active registry, and timestamp; no agent is executed,
-and this is not a security guarantee. Telemetry stays in the current chat view
-and in the governor's bounded in-memory outcome log; it is not saved with chat
-or supplied to the language model. Routing can still be displayed if the
-subsequent local model request fails.
+The dashboard's **Hardware Recovery & Academic Review Readiness** report is
+preparation-only (`GET /api/matrix/recovery-readiness`). It does not inspect or
+operate devices, perform recovery, or issue certification. Device-specific
+recovery remains blocked until its phase gate is evidenced: identify the exact
+device and goal, verify the host sees the expected device, capture a baseline,
+confirm backup/rollback and manufacturer instructions, verify hazards and
+interlocks, define stop/success criteria, and obtain approval for the specific
+physical action.
 
-The dashboard Copernicus chat also offers five local conversation personas:
-Copernicus, Scribe, Propulsion Lead, Ecosystem Governor, and Cosmic Jester.
+Connection evidence should agree across layers: inspect the power/cable/port or
+network path; confirm OS enumeration and a healthy supported driver; use a
+manufacturer-documented read-only identity/health query; and, if supported,
+confirm a fresh timestamped status/heartbeat rather than cached data. Record
+the host/interface/time and redact identifiers before sharing. A detected
+device or successful handshake proves neither safe operation nor authorization.
+
+The academic evidence checklist calls for a named standard and scope,
+reproducible methods, raw results and calibration records, uncertainty and
+failure cases, applicable safety/ethics review, and independent replication.
+Only the external reviewer or accreditor can issue a certification.
+
+The dashboard also provides a local evidence ledger (`GET /api/matrix/evidence-ledger`).
+It records benchmark results, readiness snapshots, and user-triggered read-only
+USB enumeration checks with a UTC record time, result, scope, limitations, and
+a sequence-linked SHA-256 hash chain. The chain is not signed or externally
+anchored, so it detects accidental or unsophisticated changes but does not prove
+authorship, independent verification, or certification. Entries are stored
+outside the repository at `~/.aether-engine/matrix-evidence-ledger.json`; the
+desktop app places the file in its private data directory. Set
+`AETHER_MATRIX_EVIDENCE_LEDGER_FILE` to select another local path.
+The readiness `GET` remains side-effect-free; the dashboard uses a local-only
+`POST /api/matrix/recovery-readiness` to prepare and record a readiness snapshot.
+
+USB enumeration is available only on macOS and runs only after a user submits
+the dashboard form. It stores the node count and whether an optional product
+label matched, but not the label, serial number, hardware IDs, port path, or raw
+OS output. Enumeration proves only that the host OS exposed USB nodes; it does
+not identify device health, confirm protocol communication, or authorize
+recovery. Ledger write or integrity failures are returned explicitly rather
+than reporting a successful save.
+
+`ACADEMIC_CREED.md` records the project's commitments to evidence, reproducibility,
+open scrutiny, human accountability, ecological care, medical humility, and
+honest disclosure. A passing software benchmark is not scientific peer review,
+physical validation, medical quality assurance, ethical certification, or proof
+that a system is safe or ready for deployment.
+
+The dashboard Copernicus chat offers four local conversation personas:
+Copernicus, Scribe, Propulsion Lead, and Cosmic Jester.
 Selection changes the chat accent and adds a server-owned style instruction
 to the configured Ollama model; it does not change models, synthesize a
 different audio voice, or give the assistant access to tools. The selection
 lasts for the open page and is not persisted. Other chat surfaces retain their
-existing default. Governor behavior and hardware limits remain simulated.
+existing default. Agent routing is not active.
 
-```bash
-curl -s http://127.0.0.1:8000/api/matrix/governor/route \
-  -H 'Content-Type: application/json' \
-  -d '{"task_description":"Describe a sky observation","domain":"Astronomy","execution_payload":{"target":"Rigel"}}'
-```
+### Bounded autonomy contract
+
+Matrix chat agents may use only explicitly offered capabilities. The shared
+policy allows read-only local work and configured public-data reads; archive
+search remains opt-in for the current request. Local mutations, external writes,
+and irreversible actions require action-specific human approval. Physical
+actuation additionally requires verified device-specific interlocks; no current
+agent has a hardware-control capability. Medical use is limited to educational
+research support and must not diagnose, prescribe, select treatment, or make
+triage decisions. Scientific and ecological responses must distinguish evidence
+from assumptions and state uncertainty. Unknown capabilities fail closed.
+These rules constrain the application interface; model instructions alone are
+not a security boundary or proof of factual accuracy.
 
 ## Galileo desktop test drive (macOS)
 
@@ -1041,8 +1143,8 @@ data. This remains a loopback-only local dashboard, not a public website. The
 Copernicus tab uses local Ollama via `AETHER_OLLAMA_MODEL` (default
 `qwen3.5:4b`); the current message, up to six recent successful turns in the
 open tab, selected images, and latest cloud-cover reading may be sent. Chat is
-not persisted. The dashboard chat shows simulated governor routing telemetry;
-the model itself cannot operate Matrix controls.
+not persisted. Agent routing is retired; the model cannot operate Matrix
+controls.
 Weather data is provided by Open-Meteo; AetherSystem is an independent project.
 Ollama must serve
 the configured, already-installed model at `http://localhost:11434`.
@@ -1254,6 +1356,42 @@ pruned branch metadata is kept in a bounded in-memory compost archive.
 `aether-quantum-diagnostics` now includes a self-check of the admission,
 pruning, compost, and zero-harm invariants.
 
+The separate `aether_engine.equilibrium_decision` module and
+`aether-equilibrium-review` command calculate an illustrative risk score,
+wave/particle coefficients, and triggered rule thresholds. The Matrix
+dashboard exposes the same simulation through its loopback
+`POST /api/matrix/equilibrium/evaluate` endpoint and **Equilibrium Proposal
+Review** panel. Default rule definitions are immutable within each engine
+instance, and callers may provide alternate rules when constructing one.
+Every result is advisory: no proposal is authorized or executed, and the
+simulator is not a security sandbox or a substitute for real policy enforcement.
+
+```bash
+aether-equilibrium-review \
+  --action-name "Review a proposed change" \
+  --target-impact-severity 20 \
+  --ecosystem-hazard 5
+```
+
+The standalone `equilibrium_peer_review.py` module and
+`aether-equilibrium-weights` command implement the separate normalized-risk
+sigmoid model (`0–1`, threshold `0.5`, steepness `12`). The peer-review result
+rounds both complementary weights to four decimals; the guardrail returns
+unrounded weights and accepts a configurable threshold and positive steepness.
+The Matrix compares both models at
+`POST /api/matrix/equilibrium/weights` and in **Normalized Weight Comparison**.
+For the unrounded guardrail weights, finite `k > 0`, and normalized risk and
+threshold, `W(r) = 1 / (1 + exp(k(r-c)))` and `P(r) = 1 - W(r)`.
+Thus `W + P = 1`, `W(c) = P(c) = 0.5`, and
+`dW/dr = -kWP < 0` while `dP/dr = kWP > 0`; the curve is symmetric around
+the threshold (`W(c+d) = P(c-d)`). These are mathematical properties of the
+chosen logistic scoring rule. Unit tests compare it with the direct formula
+and check these invariants over a 1,001-point normalized-risk grid; the
+read-only system diagnostics sample them at 101 points and verify input
+rejection. This computational evidence does not establish a physical
+wave-particle duality result, nor does the model authorize actions or provide
+a security boundary. The implementation uses only the Python standard library.
+
 The optional `aether_engine.secure_vault.JesterShieldVault` encrypts strings
 with Fernet and requires an access token supplied by the caller. Install its
 dependency with `python -m pip install -e ".[secure-vault]"`. Its default
@@ -1316,6 +1454,15 @@ On macOS, `aether-engine backup schedule install` installs a per-project user La
 `aether-engine doctor` performs read-only checks of the selected database and its OS-appropriate permissions, newest backup validity, backup permissions, and supported scheduled-backup status/last exit code. Missing backups or an uninstalled schedule are reported as warnings; detected corruption, insecure permissions, or a failed installed schedule make the command exit nonzero. On Windows, manual Task Scheduler setup is reported as a warning because the built-in schedule management commands are unavailable. The doctor does not format or modify project source files.
 
 `aether-quantum-diagnostics` reports Python/runtime compatibility, host OS and CPU count, memory, workspace disk capacity, project metadata/source layout, and the quantum simulator's baseline and collapse-guard checks. It is read-only and does not scan networks, inspect database/backups, or modify system settings. Available memory below 512 MiB is a warning; workspace disk space below 1 GiB is a warning and below 128 MiB is a failure. Use `--workspace PATH` to select the project directory explicitly.
+
+`python3 verify_node_health.py` runs those local project/host checks and reads
+capacity plus SMART metadata for the selected mounted volume (the local root
+volume by default). It does not scan filesystems or repair disks. It makes no
+network connections unless `--remote-host` is explicitly supplied; that option
+accepts only a private IP and tests TCP reachability on ports 22 and 11434. A
+successful connection does not verify the remote node's identity, service
+health, or hardware. The report's SHA-256 is a content digest, not a signature
+or certification.
 
 `aether-quantum-simulate` runs a local state-vector circuit and prints JSON with
 the amplitudes, probabilities, and seeded measurement counts:
