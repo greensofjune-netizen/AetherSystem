@@ -1,4 +1,5 @@
 .aether-engine.sqlite3*
+.aether-lineage/
 .aether-backups/
 backups/
 .venv/

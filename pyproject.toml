@@ -21,10 +21,14 @@ aether-los-link = "aether_engine.los_link:main"
 aether-quantum-diagnostics = "aether_engine.quantum_simulator:diagnostics_main"
 aether-quantum-simulate = "aether_engine.quantum_simulator:simulate_main"
 aether-master-matrix = "aether_master_matrix:main"
+aether-lineage-archive = "aether_engine.lineage_archive:main"
 aether-master-desktop = "aether_engine.master_desktop:main"
 galileo = "aether_engine.galileo_desktop:main"
 matrix-aristotle = "aether_engine.aristotle_desktop:main"
 aether-symbiotic-equilibrium = "aether_engine.symbiotic_equilibrium:main"
+aether-equilibrium-review = "aether_engine.equilibrium_decision:main"
+aether-equilibrium-weights = "equilibrium_peer_review:main"
+aether-food-gcode = "food_matrix_streamer:main"
 
 [project.optional-dependencies]
 dev = ["build>=1.2.2", "httpx>=0.28.1", "mypy>=2.4.1", "numpy>=2.4.6", "pandas>=3.1.1", "pandas-stubs>=3.1.0.261029", "playwright>=1.65.0", "pytest>=9.2.0", "ruff>=0.17.4", "skyfield>=1.55", "types-ephem>=4.2.0.20260724"]
@@ -43,9 +47,11 @@ desktop = ["ephem>=4.2.1", "fastapi>=0.162.5", "numpy>=2.4.6", "pandas>=3.1.1", 
 [tool.setuptools]
 py-modules = [
     "aether_master_matrix",
-    "agent_governor",
+    "equilibrium_peer_review",
     "history_matrix_archive",
+    "matrix_academic_benchmarks",
     "workspace_matrix_bridge",
+    "food_matrix_streamer",
 ]
 package-dir = {"" = ".", "aether_engine" = "src/aether_engine"}
 
@@ -57,6 +63,7 @@ include = ["aether_engine*", "automator"]
 aether_engine = ["galileo_assets/*", "galileo_voice.swift"]
 
 [tool.setuptools.data-files]
+"share/aether-engine" = ["ACADEMIC_CREED.md"]
 "share/aether-engine/frontend" = ["frontend/aether_client.js", "frontend/index.html", "frontend/monitor_tasks.js"]
 "share/aether-engine/frontend/tasks" = [
     "frontend/tasks/index.html", "frontend/tasks/tasks.css",
