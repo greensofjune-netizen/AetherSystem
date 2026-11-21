@@ -121,6 +121,7 @@ class AetherHistorian:
             "model": self.model,
             "prompt": prompt.strip(),
             "stream": False,
+            "think": False,
             "options": {"temperature": 0.2},
         }
         if images:

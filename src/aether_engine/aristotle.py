@@ -14,10 +14,12 @@ from typing import Any
 from fastapi import FastAPI, HTTPException, Query
 from pydantic import BaseModel, ConfigDict, Field
 
-from agent_governor import AgentGovernor
 from history_matrix_archive import UniversalHistoryArchive
+from matrix_academic_benchmarks import MatrixAcademicBenchmarkSuite
 
 from .astronomy_engine import get_astronomy_engine
+from .autonomy_policy import authorize_agent_capability
+from .matrix_evidence_ledger import EvidenceLedgerError, MatrixEvidenceLedger
 from .model_providers import ChatTool, ToolCall
 from .symbiotic_equilibrium import (
     BranchAlreadyRegisteredError,
@@ -68,6 +70,18 @@ def execute_matrix_tools(
     if not 1 <= len(calls) <= 2:
         raise HTTPException(502, "Local model requested too many Matrix tools.")
     for call in calls:
+        authorization = authorize_agent_capability(
+            call.name, scope_opted_in=include_history
+        )
+        if not authorization.allowed:
+            LOGGER.warning(
+                "Matrix tool request blocked by autonomy policy: %s (%s)",
+                call.name,
+                authorization.reason,
+            )
+            raise HTTPException(
+                502, "Local model requested a capability blocked by autonomy policy."
+            )
         if not isinstance(call.arguments, dict):
             raise HTTPException(502, "Local model returned invalid tool arguments.")
         if call.name == MATRIX_SNAPSHOT_TOOL.name:
@@ -174,7 +188,7 @@ def matrix_telemetry_path(project: Path) -> Path:
     )).expanduser()
 
 
-def read_matrix_overview(project: Path, governor: AgentGovernor) -> dict[str, Any]:
+def read_matrix_overview(project: Path) -> dict[str, Any]:
     path = matrix_telemetry_path(project)
     if path.is_symlink():
         raise HTTPException(503, "Matrix telemetry file cannot be a symlink.")
@@ -189,11 +203,11 @@ def read_matrix_overview(project: Path, governor: AgentGovernor) -> dict[str, An
         except (OSError, ValueError) as error:
             LOGGER.warning("Matrix telemetry unavailable: %s", error)
             raise HTTPException(503, "Matrix telemetry could not be read.") from error
-    return {"latest_simulation": latest, "allocations": governor.allocation_chart()}
+    return {"latest_simulation": latest}
 
 
 def matrix_agent_context(project: Path) -> str:
-    overview = read_matrix_overview(project, AgentGovernor())
+    overview = read_matrix_overview(project)
     latest = overview["latest_simulation"]
     telemetry = None
     if latest is not None:
@@ -222,17 +236,8 @@ def matrix_agent_context(project: Path) -> str:
                 else None
             )
 
-    chart = overview["allocations"]
-    estimates = {
-        label: dataset["data"][index]["value_raw"]
-        for dataset in chart["datasets"]
-        for index, label in enumerate(chart["labels"])
-    }
     snapshot = {
         "latest_simulation": telemetry,
-        "agent_memory_estimates_gb": estimates,
-        "estimated_total_gb": chart["metadata"]["estimated_total_gb"],
-        "reference_threshold_gb": chart["metadata"]["reference_threshold_gb"],
         "measurements_are_simulated": True,
     }
     return (
@@ -289,28 +294,22 @@ def render_index(path: Path) -> str:
     text = text.replace(
         '<h2 id="matrix-heading">Matrix actions</h2>',
         '''<h2 id="matrix-heading">Matrix engine</h2>
-          <p>System telemetry is simulated; the governor does not execute agents or measure memory.</p>
+          <p>The Agent Governor is retired. Telemetry remains simulated; academic benchmark results are software checks, not certification.</p>
           <h3 id="matrix-circuit-heading">State-vector circuit</h3>
           <p>Open the local Formula Lab simulator for exact small-circuit math and seeded measurement samples. It does not model quantum hardware noise and is capped at 12 qubits.</p>
           <button type="button" class="voice-button" id="matrix-open-quantum-circuit">Open circuit simulator</button>
           <button type="button" id="matrix-refresh">Refresh engine overview</button>
           <p id="matrix-overview" role="status"></p>
-          <table><caption>Illustrative agent memory estimates</caption>
-          <thead><tr><th scope="col">Component</th><th scope="col">Estimated GB</th></tr></thead>
-          <tbody id="governor-allocations"></tbody></table>
-          <p id="governor-summary"></p>
-          <form id="governor-form" aria-label="Simulate agent routing">
-            <label for="governor-domain">Simulated agent domain</label>
-            <select id="governor-domain"><option>Astronomy</option><option>Propulsion</option><option>History</option></select>
-            <label for="governor-task">Task description</label>
-            <input id="governor-task" maxlength="4000" required>
-            <button type="submit">Simulate routing</button>
-          </form>
-          <p id="governor-result" role="status"></p>''',
+          <h3 id="academic-benchmark-heading">Ethics &amp; Academic Benchmarks</h3>
+          <p>Policy cases and a deterministic synthetic CPU workload only. No physical, recovery, medical-quality, or ecological outcome is measured.</p>
+          <button type="button" id="run-academic-benchmark">Run local benchmark</button>
+          <p id="academic-benchmark-status" role="status" aria-live="polite">No benchmark run yet.</p>
+          <h4>Latest benchmark report</h4>
+          <pre id="academic-benchmark-report"></pre>''',
     )
     text = text.replace(
-        '<p>System telemetry is simulated; the governor does not execute agents or measure memory.</p>',
-        '''<p>System telemetry is simulated; the governor does not execute agents or measure memory.</p>
+        '<p>The Agent Governor is retired. Telemetry remains simulated; academic benchmark results are software checks, not certification.</p>',
+        '''<p>The Agent Governor is retired. Telemetry remains simulated; academic benchmark results are software checks, not certification.</p>
           <section aria-labelledby="equilibrium-heading">
             <h3 id="equilibrium-heading">Symbiotic equilibrium</h3>
             <p>This in-memory blueprint manages only branches registered here. It never deletes or changes project files, archives, or live services. A harmful branch is rejected; pruning removes only simulator entries and composts harmless ones.</p>
@@ -376,13 +375,6 @@ def render_index(path: Path) -> str:
     return text
 
 
-class GovernorRequest(BaseModel):
-    model_config = ConfigDict(extra="forbid")
-    task_description: str = Field(min_length=1, max_length=4000)
-    domain: str = Field(min_length=1, max_length=100)
-    execution_payload: dict[str, Any]
-
-
 class EquilibriumBranchRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
     branch_id: str = Field(min_length=1, max_length=100)
@@ -399,7 +391,6 @@ class EquilibriumNurtureRequest(BaseModel):
 
 
 def install_aristotle_routes(app: FastAPI, project: Path) -> None:
-    governor = AgentGovernor()
     equilibrium = SymbioticEquilibriumEngine()
 
     @app.get("/api/aristotle/history")
@@ -411,9 +402,35 @@ def install_aristotle_routes(app: FastAPI, project: Path) -> None:
     @app.get("/api/aristotle/matrix")
     def matrix_overview() -> dict[str, Any]:
         return {
-            **read_matrix_overview(project, governor),
+            **read_matrix_overview(project),
             "symbiotic_equilibrium": equilibrium.system_health_report(),
         }
+
+    @app.post("/api/aristotle/academic-benchmarks")
+    def academic_benchmarks() -> dict[str, Any]:
+        report = MatrixAcademicBenchmarkSuite().run(sim_cycles=1000)
+        try:
+            MatrixEvidenceLedger().record_benchmark(report)
+        except (EvidenceLedgerError, ValueError) as error:
+            LOGGER.exception(
+                "Matrix Aristotle benchmark evidence could not be recorded."
+            )
+            raise HTTPException(
+                status_code=503,
+                detail="Benchmark completed, but its result could not be saved to the local evidence ledger.",
+            ) from error
+        return report
+
+    @app.get("/api/aristotle/evidence-ledger")
+    def evidence_ledger() -> dict[str, object]:
+        try:
+            return MatrixEvidenceLedger().snapshot()
+        except EvidenceLedgerError as error:
+            LOGGER.exception("Matrix Aristotle evidence ledger is unavailable.")
+            raise HTTPException(
+                status_code=503,
+                detail="The local evidence ledger is unavailable or failed integrity verification.",
+            ) from error
 
     @app.get("/api/aristotle/equilibrium")
     def equilibrium_report() -> dict[str, Any]:
@@ -455,10 +472,3 @@ def install_aristotle_routes(app: FastAPI, project: Path) -> None:
             "notes": equilibrium.prune_and_compost(),
             "snapshot": equilibrium.system_health_report(),
         }
-
-    @app.post("/api/aristotle/governor/route")
-    def route_governor(entry: GovernorRequest) -> dict[str, Any]:
-        try:
-            return governor.route_task(entry.task_description, entry.domain, entry.execution_payload)
-        except ValueError as error:
-            raise HTTPException(422, str(error)) from error

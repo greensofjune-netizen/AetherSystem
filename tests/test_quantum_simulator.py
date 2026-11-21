@@ -94,14 +94,18 @@ def test_system_diagnostic_scanner_reports_local_app_and_host(
         "AetherSystem project",
         "Quantum simulator",
         "Symbiotic equilibrium",
+        "Equilibrium decision",
+        "Equilibrium weights",
     }
     assert all(check.status == "OK" for check in checks)
     assert "collapse guard is active" in results["Quantum simulator"].detail
     assert "zero-harm" in results["Symbiotic equilibrium"].detail
+    assert "no proposal is authorized or executed" in results["Equilibrium decision"].detail
+    assert "four-decimal parity" in results["Equilibrium weights"].detail
 
     report = scanner.render_report(checks)
     assert "AETHER SYSTEM DIAGNOSTICS" in report
-    assert "7 checks; 7 OK, 0 warnings, 0 failures." in report
+    assert "9 checks; 9 OK, 0 warnings, 0 failures." in report
 
 
 def test_system_diagnostic_scanner_surfaces_low_resources_and_bad_project(

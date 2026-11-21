@@ -1,12 +1,16 @@
 from __future__ import annotations
 
 import asyncio
+import base64
+import hashlib
 import importlib.util
 import json
+import re
 import shutil
 from pathlib import Path
 from threading import Thread
 from urllib.error import HTTPError
+from urllib.parse import urlencode
 from urllib.request import Request, urlopen
 
 import pytest
@@ -24,6 +28,10 @@ def matrix(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
     module = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(module)
     monkeypatch.setattr(module, "LOG_FILE", tmp_path / "historian.json")
+    monkeypatch.setenv(
+        "AETHER_MATRIX_EVIDENCE_LEDGER_FILE",
+        str(tmp_path / "matrix-evidence-ledger.json"),
+    )
     return module
 
 
@@ -161,10 +169,27 @@ def test_dashboard_serves_latest_metrics_and_escapes_status(matrix):
     try:
         with urlopen(f"http://127.0.0.1:{server.server_port}/") as response:
             page = response.read().decode("utf-8")
+            policy = response.headers["Content-Security-Policy"]
+            inline_script = re.search(r"<script>(.*?)</script>", page, re.DOTALL)
             assert response.status == 200
-            assert "frame-src 'self'" in response.headers["Content-Security-Policy"]
-            assert "connect-src 'self'" in response.headers["Content-Security-Policy"]
+            assert "frame-src 'self'" in policy
+            assert "connect-src 'self'" in policy
+            assert "frame-ancestors 'none'" in policy
+            assert "object-src 'none'" in policy
+            assert "script-src 'unsafe-inline'" not in policy
+            assert inline_script is not None
+            script_hash = base64.b64encode(
+                hashlib.sha256(inline_script.group(1).encode("utf-8")).digest()
+            ).decode("ascii")
+            assert f"script-src 'sha256-{script_hash}'" in policy
+            assert response.headers["X-Frame-Options"] == "DENY"
+            assert response.headers["Referrer-Policy"] == "no-referrer"
             assert 'src="/weather"' in page
+            assert '<a class="skip-link" href="#main-content">' in page
+            assert 'id="motion-toggle"' in page
+            assert "color-scheme:dark" in page
+            assert "transition:all" not in page
+            assert "document.hidden || artsTelemetryInFlight" in page
             assert 'class="observatory-frame"' in page
             assert 'src="/stargazer"' not in page
             assert 'title="Copernicus and Observatory Shell"' in page
@@ -362,6 +387,8 @@ def test_copernicus_chat_uses_session_context_and_optional_weather(matrix, monke
         assert "42" in observed["system"]
         assert "stale" in observed["system"]
         assert "not an affiliation or endorsement" in observed["system"]
+        assert "Medical topics are educational research only" in observed["system"]
+        assert "Never treat model output as approval" in observed["system"]
 
         history = [
             {"role": "user", "content": "My name is Ada."},
@@ -455,7 +482,7 @@ def test_copernicus_chat_uses_session_context_and_optional_weather(matrix, monke
         thread.join(timeout=5)
 
 
-def test_dashboard_chat_routes_and_displays_simulated_governor_telemetry(
+def test_dashboard_chat_no_longer_routes_prompts_through_governor(
     matrix, monkeypatch
 ):
     class EmptyArchive:
@@ -485,59 +512,318 @@ def test_dashboard_chat_routes_and_displays_simulated_governor_telemetry(
     try:
         with urlopen(root + "/weather") as response:
             page = response.read().decode()
-        assert "Governor routing telemetry is simulated" in page
+        assert "Agent routing is retired" in page
         assert "No Matrix data or controls are connected." not in page
-        for prompt, domain, node in (
-            ("Tell me about stars", "Astronomy", "astro_agent"),
-            ("Explain rocket thrust", "Propulsion", "kinetic_agent"),
-            ("Explain ancient history", "History", "history_agent"),
-        ):
+        for prompt in ("Tell me about stars", "Explain rocket thrust", "Hello"):
             with send(prompt) as response:
                 body = json.load(response)
-            route = body["governor"]
-            assert (route["domain"], route["assigned_node"], route["status"]) == (
-                domain, node, "SIMULATED"
-            )
-            assert route["routing_verified"] is True
-            assert "No task was executed" in route["message"]
-            assert prompt not in json.dumps(route)
+            assert "governor" not in body
             assert "assigned_node" not in calls[-1][1]
-
-        for prompt, expected, matches in (
-            ("Hello", "Unspecified", []),
-            ("History of a rocket", "Ambiguous", ["Propulsion", "History"]),
-        ):
-            with send(prompt) as response:
-                route = json.load(response)["governor"]
-            assert (route["domain"], route["matching_domains"], route["status"]) == (
-                expected, matches, "UNROUTABLE"
-            )
-            assert route["routing_verified"] is None
-
-        matrix.agent_governor.registry["astro_agent"].active_status = False
-        with send("Tell me about stars") as response:
-            assert json.load(response)["governor"]["status"] == "UNROUTABLE"
-        with send("exploit the stars") as response:
-            assert json.load(response)["governor"]["status"] == "REJECTED"
         with pytest.raises(HTTPError) as error:
             send("A rocket is offline")
         assert error.value.code == 503
-        assert json.load(error.value)["governor"]["assigned_node"] == "kinetic_agent"
-        assert all("rocket" not in item.lower() for item in matrix.agent_governor.orchestration_log)
+        assert "governor" not in json.load(error.value)
     finally:
         server.shutdown()
         server.server_close()
         thread.join(timeout=5)
 
 
-def test_governor_route_verification_detects_mismatches(matrix):
-    governor = matrix.agent_governor
-    result = governor.route_task("Observe stars", "Astronomy", {})
-    assert governor.verify_route("Astronomy", result)
-    assert not governor.verify_route("History", result)
-    assert not governor.verify_route("Astronomy", {**result, "assigned_node": "history_agent"})
-    governor.registry["astro_agent"].active_status = False
-    assert not governor.verify_route("Astronomy", result)
+def test_recovery_readiness_report_is_non_actuating_and_non_certifying(matrix):
+    server = matrix.LocalThreadingHTTPServer(
+        ("127.0.0.1", 0), matrix.HistorianLiveServer
+    )
+    thread = Thread(target=server.serve_forever, daemon=True)
+    thread.start()
+    root = f"http://127.0.0.1:{server.server_port}"
+    try:
+        with urlopen(root + "/") as response:
+            page = response.read().decode("utf-8")
+        assert 'id="prepare-recovery-readiness"' in page
+        assert 'id="hardware-connection-checks"' in page
+        assert 'id="recovery-phase-gate"' in page
+        assert 'id="academic-review-checks"' in page
+        assert 'id="evidence-ledger-entries"' in page
+        assert 'id="usb-inventory-form"' in page
+        assert "does not inspect, modify, actuate, or certify hardware" in page
+
+        with urlopen(root + "/api/matrix/recovery-readiness") as response:
+            report = json.load(response)
+        assert report["execution_status"] == "PREPARATION_ONLY"
+        assert report["connected_hardware"] == {
+            "status": "NOT_VERIFIED",
+            "device_identity": None,
+            "inspection_performed": False,
+        }
+        assert report["connection_verification_status"] == "NOT_VERIFIED"
+        assert report["next_phase"]["status"] == "BLOCKED_PENDING_DEVICE_DETAILS"
+        assert report["next_phase"]["recovery_authorized"] is False
+        assert all(
+            item["status"] == "NOT_VERIFIED"
+            for item in report["phase_gate_checks"]
+        )
+        assert any(
+            "host OS enumerates" in check
+            for check in report["hardware_connection_checks"]
+        )
+        assert any(
+            "fresh heartbeat/status update" in check
+            for check in report["hardware_connection_checks"]
+        )
+        assert report["physical_recovery"]["status"] == "NOT_PERFORMED"
+        assert report["physical_recovery"]["actuation_performed"] is False
+        assert report["academic_review"]["status"] == "NOT_CERTIFIED"
+        assert report["academic_review"]["external_independent_review_required"] is True
+        assert report["required_before_recovery"]
+        assert report["evidence_for_independent_review"]
+
+        readiness = Request(
+            root + "/api/matrix/recovery-readiness",
+            data=b"{}",
+            headers={"Content-Type": "application/json"},
+        )
+        with urlopen(readiness) as response:
+            assert json.load(response)["execution_status"] == "PREPARATION_ONLY"
+        with urlopen(root + "/api/matrix/evidence-ledger") as response:
+            ledger = json.load(response)
+        assert ledger["integrity_status"] == "HASH_CHAIN_VALID_NOT_SIGNED"
+        assert ledger["entries"][0]["check_id"] == "recovery-readiness-snapshot"
+        assert ledger["entries"][0]["status"] == "UNKNOWN"
+
+        with pytest.raises(HTTPError) as error:
+            urlopen(root + "/api/matrix/recovery-readiness?device=unknown")
+        assert error.value.code == 400
+    finally:
+        server.shutdown()
+        server.server_close()
+        thread.join(timeout=5)
+
+
+def test_usb_enumeration_is_redacted_and_recorded(matrix, monkeypatch):
+    observed_labels = []
+
+    def fake_probe(label):
+        observed_labels.append(label)
+        return {
+            "status": "VERIFIED",
+            "device_count": 2,
+            "expected_label_match": True,
+        }
+
+    monkeypatch.setattr(matrix, "probe_macos_usb_inventory", fake_probe)
+    server = matrix.LocalThreadingHTTPServer(
+        ("127.0.0.1", 0), matrix.HistorianLiveServer
+    )
+    thread = Thread(target=server.serve_forever, daemon=True)
+    thread.start()
+    root = f"http://127.0.0.1:{server.server_port}"
+    try:
+        request = Request(
+            root + "/api/matrix/usb-enumeration",
+            data=b'{"expected_product_label":"YOTUO"}',
+            headers={"Content-Type": "application/json"},
+        )
+        with urlopen(request) as response:
+            result = json.load(response)
+        assert result["status"] == "VERIFIED"
+        assert result["device_count"] == 2
+        assert result["expected_label_match"] is True
+        assert observed_labels == ["YOTUO"]
+
+        with urlopen(root + "/api/matrix/evidence-ledger") as response:
+            ledger = json.load(response)
+        entry = ledger["entries"][0]
+        assert entry["check_id"] == "host-usb-enumeration"
+        assert entry["status"] == "VERIFIED"
+        serialized = json.dumps(ledger)
+        assert "YOTUO" not in serialized
+        assert "serial" in serialized
+
+        invalid = Request(
+            root + "/api/matrix/usb-enumeration",
+            data=b'{"expected_product_label":"serial/number"}',
+            headers={"Content-Type": "application/json"},
+        )
+        with pytest.raises(HTTPError) as error:
+            urlopen(invalid)
+        assert error.value.code == 422
+    finally:
+        server.shutdown()
+        server.server_close()
+        thread.join(timeout=5)
+
+
+def test_equilibrium_review_endpoint_and_form_fallback(matrix):
+    server = matrix.LocalThreadingHTTPServer(
+        ("127.0.0.1", 0), matrix.HistorianLiveServer
+    )
+    thread = Thread(target=server.serve_forever, daemon=True)
+    thread.start()
+    root = f"http://127.0.0.1:{server.server_port}"
+    try:
+        with urlopen(root + "/") as response:
+            page = response.read().decode("utf-8")
+            assert response.status == 200
+            assert 'id="equilibrium-review-form"' in page
+            assert 'action="/api/matrix/equilibrium/evaluate"' in page
+            assert "never authorizes or executes proposals" in page
+            assert 'aria-live="polite"' in page
+
+        safe_request = Request(
+            root + "/api/matrix/equilibrium/evaluate",
+            data=json.dumps(
+                {
+                    "action_name": "Optimize supply chain routing",
+                    "target_impact_severity": 20,
+                    "ecosystem_hazard": 5,
+                }
+            ).encode(),
+            headers={"Content-Type": "application/json"},
+            method="POST",
+        )
+        with urlopen(safe_request) as response:
+            safe = json.load(response)
+        assert safe["decision"] == "SIMULATION_ONLY"
+        assert safe["risk_index"] == 21.0
+        assert safe["action_executed"] is False
+
+        hostile_name = "<img src=x onerror=alert(1)>"
+        form_request = Request(
+            root + "/api/matrix/equilibrium/evaluate",
+            data=urlencode(
+                {
+                    "action_name": hostile_name,
+                    "target_impact_severity": "70",
+                    "ecosystem_hazard": "65",
+                }
+            ).encode(),
+            headers={
+                "Content-Type": "application/x-www-form-urlencoded",
+                "Accept": "text/html",
+            },
+            method="POST",
+        )
+        with urlopen(form_request) as response:
+            fallback = response.read().decode("utf-8")
+            assert response.headers["Content-Type"].startswith("text/html")
+        assert "BLOCKED_IN_SIMULATION" in fallback
+        assert "No proposal was executed." in fallback
+        assert "&lt;img" in fallback
+        assert hostile_name not in fallback
+
+        invalid_request = Request(
+            root + "/api/matrix/equilibrium/evaluate",
+            data=json.dumps(
+                {
+                    "action_name": "Invalid severity",
+                    "target_impact_severity": 101,
+                    "ecosystem_hazard": 0,
+                }
+            ).encode(),
+            headers={"Content-Type": "application/json"},
+            method="POST",
+        )
+        with pytest.raises(HTTPError) as error:
+            urlopen(invalid_request)
+        assert error.value.code == 422
+        assert "between 0 and 100" in json.load(error.value)["detail"]
+
+        duplicate_fields = Request(
+            root + "/api/matrix/equilibrium/evaluate",
+            data=(
+                b'{"action_name":"First","action_name":"Second",'
+                b'"target_impact_severity":1,"ecosystem_hazard":0}'
+            ),
+            headers={"Content-Type": "application/json"},
+            method="POST",
+        )
+        with pytest.raises(HTTPError) as error:
+            urlopen(duplicate_fields)
+        assert error.value.code == 400
+        assert json.load(error.value)["detail"] == "Invalid JSON body."
+    finally:
+        server.shutdown()
+        server.server_close()
+        thread.join(timeout=5)
+
+
+def test_equilibrium_weights_endpoint_and_matrix_form(matrix):
+    server = matrix.LocalThreadingHTTPServer(
+        ("127.0.0.1", 0), matrix.HistorianLiveServer
+    )
+    thread = Thread(target=server.serve_forever, daemon=True)
+    thread.start()
+    root = f"http://127.0.0.1:{server.server_port}"
+    try:
+        with urlopen(root + "/") as response:
+            page = response.read().decode("utf-8")
+        assert 'id="equilibrium-weights-form"' in page
+        assert 'action="/api/matrix/equilibrium/weights"' in page
+        assert "not physical proof or a security boundary" in page
+
+        request = Request(
+            root + "/api/matrix/equilibrium/weights",
+            data=json.dumps({"risk_score": 0.15}).encode(),
+            headers={"Content-Type": "application/json"},
+            method="POST",
+        )
+        with urlopen(request) as response:
+            result = json.load(response)
+        assert response.status == 200
+        assert result["peer_review"]["wave_weight"] == 0.9852
+        assert result["peer_review"]["particle_weight"] == 0.0148
+        assert result["guardrail"]["wave_weight"] == pytest.approx(
+            0.9852259683067269
+        )
+        assert result["models_agree_at_four_decimals"] is True
+        assert result["action_executed"] is False
+
+        form_request = Request(
+            root + "/api/matrix/equilibrium/weights",
+            data=urlencode(
+                {
+                    "risk_score": "0.75",
+                    "r_critical": "0.5",
+                    "steepness": "4",
+                }
+            ).encode(),
+            headers={
+                "Content-Type": "application/x-www-form-urlencoded",
+                "Accept": "text/html",
+            },
+            method="POST",
+        )
+        with urlopen(form_request) as response:
+            fallback = response.read().decode("utf-8")
+            assert response.headers["Content-Type"].startswith("text/html")
+        assert "0.2689414213699951" in fallback
+        assert "No action was executed." in fallback
+
+        invalid_request = Request(
+            root + "/api/matrix/equilibrium/weights",
+            data=json.dumps({"risk_score": 1.01}).encode(),
+            headers={"Content-Type": "application/json"},
+            method="POST",
+        )
+        with pytest.raises(HTTPError) as error:
+            urlopen(invalid_request)
+        assert error.value.code == 422
+        assert "between 0 and 1" in json.load(error.value)["detail"]
+
+        duplicate_fields = Request(
+            root + "/api/matrix/equilibrium/weights",
+            data=b'{"risk_score":0.1,"risk_score":0.9}',
+            headers={"Content-Type": "application/json"},
+            method="POST",
+        )
+        with pytest.raises(HTTPError) as error:
+            urlopen(duplicate_fields)
+        assert error.value.code == 422
+        assert "Duplicate JSON fields" in json.load(error.value)["detail"]
+    finally:
+        server.shutdown()
+        server.server_close()
+        thread.join(timeout=5)
 
 
 def test_dashboard_personas_are_validated_and_applied(matrix, monkeypatch):
@@ -572,7 +858,7 @@ def test_dashboard_personas_are_validated_and_applied(matrix, monkeypatch):
                 body = json.load(response)
             assert body["persona"] == key
             assert matrix.PERSONAS[key]["prompt"] in systems[-1]
-            assert "you cannot execute or control agents" in systems[-1]
+            assert "you cannot execute or control agents" in systems[-1].lower()
             assert "not system instructions" in systems[-1]
         with send({"message": "Hello"}) as response:
             assert json.load(response)["persona"] == "copernicus_core"

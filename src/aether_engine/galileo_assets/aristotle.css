@@ -1,10 +1,10 @@
 .tabs{flex-wrap:nowrap;overflow-x:auto;flex:none;scroll-padding-inline:1rem}
 .tabs .tab{flex:none}
 .history-opt-in{display:block;color:var(--text);font-size:12px;margin:6px 0}
-#history-form,#governor-form,#equilibrium-register-form{display:flex;flex-wrap:wrap;gap:10px;align-items:center}
-#history-form label,#governor-form label,#equilibrium-register-form label{flex-basis:100%}
-#history-form input,#governor-form input,#governor-form select,#equilibrium-register-form input:not([type=checkbox]){font:inherit;min-width:12rem;background:var(--panel-2);color:var(--text);border:1px solid var(--line);padding:8px}
-#history-form button,#governor-form button,#matrix-refresh,#equilibrium-refresh,#equilibrium-nurture,#equilibrium-prune,#equilibrium-register-form button{padding:8px;background:var(--panel-2);color:var(--text);border:1px solid var(--gold);border-radius:7px}
+#history-form,#equilibrium-register-form{display:flex;flex-wrap:wrap;gap:10px;align-items:center}
+#history-form label,#equilibrium-register-form label{flex-basis:100%}
+#history-form input,#equilibrium-register-form input:not([type=checkbox]){font:inherit;min-width:12rem;background:var(--panel-2);color:var(--text);border:1px solid var(--line);padding:8px}
+#history-form button,#run-academic-benchmark,#matrix-refresh,#equilibrium-refresh,#equilibrium-nurture,#equilibrium-prune,#equilibrium-register-form button{padding:8px;background:var(--panel-2);color:var(--text);border:1px solid var(--gold);border-radius:7px}
 #history-results{padding-left:1.2rem}
 #history-results li{margin-block:1rem;overflow-wrap:anywhere}
 #matrix-panel table{border-collapse:collapse;max-width:100%;margin-block:1rem}

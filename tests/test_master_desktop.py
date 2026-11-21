@@ -27,7 +27,8 @@ def test_desktop_window_closes_backend_on_exit_and_failure():
 
 
 def test_desktop_rejects_symlinked_data_file(tmp_path, monkeypatch):
-    for key in ("AETHER_DATABASE_PATH", "AETHER_HISTORIAN_LOG_FILE",
+    for key in ("AETHER_DATABASE_PATH", "AETHER_MATRIX_EVIDENCE_LEDGER_FILE",
+                "AETHER_HISTORIAN_LOG_FILE",
                 "AETHER_HISTORY_ARCHIVE", "AETHER_PROPULSION_ARCHIVE"):
         monkeypatch.delenv(key, raising=False)
     target = tmp_path / "outside"
@@ -65,6 +66,7 @@ def test_desktop_real_restart_persistence_origin_checks_and_shutdown(tmp_path):
     root = Path(__file__).resolve().parents[1]
     script = """
 import sys
+import os
 import urllib.error
 import urllib.request
 from pathlib import Path
@@ -75,6 +77,9 @@ server = MasterDesktopServer()
 matrix = server.matrix
 assert matrix.LOG_FILE == directory / "simulated-telemetry.json"
 assert matrix._aether_database_path() == directory / "tasks.sqlite3"
+assert os.environ["AETHER_MATRIX_EVIDENCE_LEDGER_FILE"] == str(
+    directory / "matrix-evidence-ledger.json"
+)
 history = matrix.UniversalHistoryArchive()
 propulsion = matrix.KineticPropulsionArchive()
 assert history.db_path == directory / "history.sqlite3"

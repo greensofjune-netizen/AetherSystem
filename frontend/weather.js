@@ -8,6 +8,7 @@ const WEATHER_CONFIG = Object.freeze({
 });
 let activeCoords = { name: "Upland, CA", lat: 34.0975, lon: -117.6484 };
 let busy = false;
+let weatherRefreshTimer = null;
 let lastSync = null;
 let latestWeatherContext = null;
 let latestCopilotWeather = null;
@@ -40,6 +41,19 @@ const copernicusEnabled = document.body.dataset.copernicus === "true";
 element("copernicus-tab").hidden = !copernicusEnabled;
 const shellTabs = [...document.querySelectorAll('[role="tab"]')].filter((tab) => !tab.hidden);
 const stargazerFrame = element("stargazer-frame");
+const weatherPanel = element("weather-panel");
+
+function scheduleWeatherRefresh() {
+  if (weatherRefreshTimer !== null) {
+    window.clearTimeout(weatherRefreshTimer);
+    weatherRefreshTimer = null;
+  }
+  if (document.hidden || weatherPanel.hidden) return;
+  weatherRefreshTimer = window.setTimeout(() => {
+    weatherRefreshTimer = null;
+    syncTelemetry();
+  }, WEATHER_CONFIG.refreshMs);
+}
 
 function notifyStargazerVisibility() {
   stargazerFrame.contentWindow?.postMessage({
@@ -58,6 +72,11 @@ function selectShellTab(index) {
     stargazerFrame.src = stargazerFrame.dataset.src;
   }
   notifyStargazerVisibility();
+  if (shellTabs[index].id === "weather-tab") {
+    if (!document.hidden) syncTelemetry();
+  } else {
+    scheduleWeatherRefresh();
+  }
 }
 
 shellTabs.forEach((tab, index) => {
@@ -235,6 +254,7 @@ async function syncTelemetry(query = "") {
     element("sync-button").disabled = false;
     element("city-input").disabled = false;
     busy = false;
+    scheduleWeatherRefresh();
   }
 }
 
@@ -248,5 +268,10 @@ element("search-form").addEventListener("submit", (event) => {
   }
   syncTelemetry(query);
 });
+
+document.addEventListener("visibilitychange", () => {
+  if (document.hidden) scheduleWeatherRefresh();
+  else if (!weatherPanel.hidden) syncTelemetry();
+});
+
 syncTelemetry();
-setInterval(() => syncTelemetry(), WEATHER_CONFIG.refreshMs);

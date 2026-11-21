@@ -35,23 +35,41 @@
       $('matrix-overview').textContent = latest
         ? `Latest simulated state: ${latest.system_status || 'unknown'} · epoch ${latest.epoch ?? 'unknown'}.`
         : 'No simulated telemetry recorded.';
-      const chart = data.allocations;
-      $('governor-allocations').replaceChildren();
-      chart.labels.forEach((name, index) => {
-        const row = document.createElement('tr');
-        const label = document.createElement('th');
-        label.scope = 'row';
-        label.textContent = name;
-        const value = document.createElement('td');
-        value.textContent = String(chart.datasets[0].data[index].value_raw);
-        row.append(label, value);
-        $('governor-allocations').append(row);
-      });
-      $('governor-summary').textContent = `Estimated total ${chart.metadata.estimated_total_gb} GB; reference ${chart.metadata.reference_threshold_gb} GB. Not measured or enforced.`;
     } catch (error) {
       $('matrix-overview').textContent = `Matrix overview unavailable: ${error.message}`;
     }
   }
+  $('run-academic-benchmark').addEventListener('click', async () => {
+    const button = $('run-academic-benchmark');
+    const status = $('academic-benchmark-status');
+    button.disabled = true;
+    status.textContent = 'Running local policy checks and a synthetic hash workload; physical measures are not included.';
+    try {
+      const response = await fetch('/api/aristotle/academic-benchmarks', {
+        method: 'POST',
+        credentials: 'same-origin',
+        headers: {
+          Accept: 'application/json',
+          'Content-Type': 'application/json',
+        },
+        body: '{}',
+      });
+      const data = await response.json();
+      if (!response.ok) {
+        throw new Error(typeof data.detail === 'string' ? data.detail : `Request failed (${response.status}).`);
+      }
+      if (!['LOCAL_POLICY_TESTS_PASS_NOT_CERTIFICATION', 'LOCAL_POLICY_TESTS_FAILED']
+        .includes(data.benchmark_status)) {
+        throw new Error('Benchmark returned an unrecognized status.');
+      }
+      $('academic-benchmark-report').textContent = JSON.stringify(data, null, 2);
+      status.textContent = `${data.benchmark_status} · ${data.policy_cases_passed}/${data.policy_case_count} policy cases passed. Physical performance and recovery were not measured.`;
+    } catch (error) {
+      status.textContent = `Benchmark unavailable: ${error.message}`;
+    } finally {
+      button.disabled = false;
+    }
+  });
   $('matrix-refresh').addEventListener('click', refreshMatrix);
   document.querySelector('[data-tab="matrix"]').addEventListener('click', () => {
     void refreshMatrix();
@@ -165,22 +183,6 @@
       $('equilibrium-status').textContent = result.notes.join(' ') || 'No branches met the prune criteria.';
     } catch (error) {
       $('equilibrium-status').textContent = `Pruning failed: ${error.message}`;
-    }
-  });
-  $('governor-form').addEventListener('submit', async (event) => {
-    event.preventDefault();
-    $('governor-result').textContent = 'Simulating route…';
-    try {
-      const response = await fetch('/api/aristotle/governor/route', {
-        method: 'POST', credentials: 'same-origin',
-        headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
-        body: JSON.stringify({ task_description: $('governor-task').value, domain: $('governor-domain').value, execution_payload: {} }),
-      });
-      const result = await response.json();
-      if (!response.ok) throw new Error(typeof result.detail === 'string' ? result.detail : `Request failed (${response.status}).`);
-      $('governor-result').textContent = `${result.status} · ${result.assigned_node}: ${result.message}`;
-    } catch (error) {
-      $('governor-result').textContent = `Routing simulation failed: ${error.message}`;
     }
   });
 })();

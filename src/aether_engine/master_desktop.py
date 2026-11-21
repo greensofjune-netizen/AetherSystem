@@ -19,6 +19,7 @@ def configure_data_directory(directory: Path) -> Path:
     directory.chmod(0o700)
     for key, name in (
         ("AETHER_DATABASE_PATH", "tasks.sqlite3"),
+        ("AETHER_MATRIX_EVIDENCE_LEDGER_FILE", "matrix-evidence-ledger.json"),
         ("AETHER_HISTORIAN_LOG_FILE", "simulated-telemetry.json"),
         ("AETHER_HISTORY_ARCHIVE", "history.sqlite3"),
         ("AETHER_PROPULSION_ARCHIVE", "propulsion.sqlite3"),

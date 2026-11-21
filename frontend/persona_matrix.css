@@ -13,5 +13,4 @@
 body[data-copernicus="true"] #copernicus-panel[data-persona="copernicus_core"] { border-color: #f05e1b; }
 body[data-copernicus="true"] #copernicus-panel[data-persona="historian_scribe"] { border-color: #9a2d19; }
 body[data-copernicus="true"] #copernicus-panel[data-persona="kinetic_engineer"] { border-color: #7dd3fc; }
-body[data-copernicus="true"] #copernicus-panel[data-persona="ecosystem_governor"] { border-color: #22c55e; }
 body[data-copernicus="true"] #copernicus-panel[data-persona="the_riddle_jester"] { border-color: #f9a851; }

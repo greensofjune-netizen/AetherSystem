@@ -46,6 +46,8 @@ def test_camera_analysis_and_explicit_feedback_are_local(tmp_path, monkeypatch):
             assert payload.model == galileo.DEFAULT_MODEL
             assert "Keep descriptions short." in payload.messages[0].content
             assert "untrusted data" in payload.messages[0].content
+            assert "Medical topics are educational research only" in payload.messages[0].content
+            assert "action-specific human approval" in payload.messages[0].content
             assert payload.messages[1].images == (image,)
             assert (await client.get("/api/conversations")).json() == []
             assert (await client.request(

@@ -216,6 +216,7 @@ document.addEventListener("visibilitychange", () => {
   if (frame !== null) cancelAnimationFrame(frame);
   frame = null; previousTime = null;
   requestRender();
+  syncStargazerBackgroundTasks();
 });
 window.addEventListener("message", (event) => {
   if (event.origin !== window.location.origin || event.source !== window.parent ||
@@ -225,10 +226,16 @@ window.addEventListener("message", (event) => {
   if (frame !== null) cancelAnimationFrame(frame);
   frame = null; previousTime = null; pointer = null;
   requestRender();
+  syncStargazerBackgroundTasks();
 });
 window.addEventListener("resize", resize);
 function updateClock() {
+  if (document.hidden || !shellVisible) return;
   document.getElementById("utc-clock").textContent = `UTC: ${new Date().toISOString().slice(11,19)}`;
+  if (clockReference !== null) {
+    commsElement("comms-utc").textContent =
+      `Backend UTC ~${new Date(clockReference + performance.now() - clockSample).toISOString().slice(11,19)}`;
+  }
 }
 if (!ctx) {
   document.getElementById("sky-status").textContent = "CANVAS UNAVAILABLE";
@@ -236,16 +243,17 @@ if (!ctx) {
   console.error("Stargazer: browser could not create a 2D canvas context.");
 }
 updateToggle("toggle-drift", drift, "Visual Drift");
-updateClock();
-setInterval(updateClock, 1000);
 resize();
 
 const commsElement = (id) => document.getElementById(id);
 let clockReference = null;
 let clockSample = 0;
+let clockTimer = null;
 let commsBusy = false;
 let commsEnabled = false;
 let commsReadingImages = false;
+let commsRefreshTimer = null;
+let commsRefreshInFlight = false;
 let selectedImages = [];
 
 async function commsJson(path, options = {}) {
@@ -254,23 +262,9 @@ async function commsJson(path, options = {}) {
   });
   const data = await response.json();
   if (!response.ok) {
-    const error = new Error(typeof data.detail === "string" ? data.detail : `Backend HTTP ${response.status}`);
-    error.governor = data.governor;
-    throw error;
+    throw new Error(typeof data.detail === "string" ? data.detail : `Backend HTTP ${response.status}`);
   }
   return data;
-}
-
-function appendCommsGovernor(telemetry) {
-  if (!telemetry) return;
-  const verification = telemetry.routing_verified === true ? "verified"
-    : telemetry.routing_verified === false ? "verification failed" : "not assigned";
-  const matches = telemetry.matching_domains.length
-    ? telemetry.matching_domains.join(", ") : "none";
-  appendComms("GOVERNOR TELEMETRY",
-    `Simulated routing · domain: ${telemetry.domain} (matches: ${matches}) · ` +
-    `${telemetry.status} · node: ${telemetry.assigned_node} · ${verification}\n${telemetry.message}`,
-    telemetry.timestamp);
 }
 
 function renderSkyStars(stars) {
@@ -451,6 +445,8 @@ function appendComms(sender, text, stamp, images = []) {
 }
 
 async function refreshComms() {
+  if (document.hidden || !shellVisible || commsRefreshInFlight) return;
+  commsRefreshInFlight = true;
   try {
     const clock = await commsJson("/api/clock");
     const reference = Date.parse(clock.utc);
@@ -472,15 +468,33 @@ async function refreshComms() {
     commsElement("comms-error").textContent = error.message;
     commsElement("comms-error").hidden = false;
     console.error("Stargazer comms configuration failed:", error);
+  } finally {
+    commsRefreshInFlight = false;
+    if (!document.hidden && shellVisible && commsRefreshTimer === null) {
+      commsRefreshTimer = window.setTimeout(() => {
+        commsRefreshTimer = null;
+        refreshComms();
+      }, 60000);
+    }
   }
 }
 
-setInterval(() => {
-  if (clockReference !== null) {
-    commsElement("comms-utc").textContent =
-      `Backend UTC ~${new Date(clockReference + performance.now() - clockSample).toISOString().slice(11,19)}`;
+function syncStargazerBackgroundTasks() {
+  if (document.hidden || !shellVisible) {
+    if (clockTimer !== null) {
+      window.clearInterval(clockTimer);
+      clockTimer = null;
+    }
+    if (commsRefreshTimer !== null) {
+      window.clearTimeout(commsRefreshTimer);
+      commsRefreshTimer = null;
+    }
+    return;
   }
-}, 1000);
+  updateClock();
+  if (clockTimer === null) clockTimer = window.setInterval(updateClock, 1000);
+  if (commsRefreshTimer === null && !commsRefreshInFlight) refreshComms();
+}
 
 commsElement("comms-form").addEventListener("submit", async (event) => {
   event.preventDefault();
@@ -514,14 +528,12 @@ commsElement("comms-form").addEventListener("submit", async (event) => {
       throw new Error("Invalid backend communication response.");
     }
     appendComms("SHELL", message, data.request_utc, selectedImages);
-    appendCommsGovernor(data.governor);
     appendComms("COPERNICUS", data.response, data.response_utc);
     input.value = "";
     selectedImages = [];
     renderSelectedImages();
     commsElement("comms-status").textContent = "Reply received. Chat is not saved; UTC stamps are assigned by the backend.";
   } catch (error) {
-    appendCommsGovernor(error.governor);
     commsElement("comms-status").textContent = "Message failed; retained for retry.";
     commsElement("comms-error").textContent = error.message;
     commsElement("comms-error").hidden = false;
@@ -533,5 +545,4 @@ commsElement("comms-form").addEventListener("submit", async (event) => {
     commsElement("comms-send").disabled = !commsEnabled;
   }
 });
-refreshComms();
-setInterval(refreshComms, 60000);
+syncStargazerBackgroundTasks();

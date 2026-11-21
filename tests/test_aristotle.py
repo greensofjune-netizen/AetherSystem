@@ -16,6 +16,10 @@ from history_matrix_archive import (
 def test_aristotle_unifies_chat_history_archive_and_matrix(tmp_path, monkeypatch):
     monkeypatch.delenv("AETHER_HISTORY_ARCHIVE", raising=False)
     monkeypatch.delenv("AETHER_HISTORIAN_LOG_FILE", raising=False)
+    monkeypatch.setenv(
+        "AETHER_MATRIX_EVIDENCE_LEDGER_FILE",
+        str(tmp_path / "matrix-evidence-ledger.json"),
+    )
     project = tmp_path / "project"
     project.mkdir()
     data = tmp_path / "galileo"
@@ -59,7 +63,21 @@ def test_aristotle_unifies_chat_history_archive_and_matrix(tmp_path, monkeypatch
             assert (await client.get("/api/aristotle/history", params={"q": "%"})).json()["records"] == []
             overview = (await client.get("/api/aristotle/matrix")).json()
             assert overview["latest_simulation"]["epoch"] == 3
-            assert overview["allocations"]["metadata"]["estimated_total_gb"] == 4.1
+            assert "allocations" not in overview
+            assert "Simulate routing" not in page.text
+            assert "Agent Governor is retired" in page.text
+            assert 'id="run-academic-benchmark"' in page.text
+            benchmark = await client.post(
+                "/api/aristotle/academic-benchmarks",
+                json={},
+            )
+            assert benchmark.status_code == 200
+            assert benchmark.json()["policy_tests_passed"] is True
+            assert benchmark.json()["public_certification_status"] == "NOT_A_CERTIFICATION"
+            assert benchmark.json()["closed_loop_recovery"]["status"] == "NOT_MEASURED"
+            ledger = (await client.get("/api/aristotle/evidence-ledger")).json()
+            assert ledger["entries"][0]["check_id"] == "matrix-policy-benchmark"
+            assert ledger["entries"][0]["status"] == "VERIFIED"
             assert overview["symbiotic_equilibrium"]["registered_branches"] == 0
             assert overview["symbiotic_equilibrium"]["zero_harm_verified"] is True
             assert 'id="equilibrium-register-form"' in page.text
@@ -163,7 +181,7 @@ def test_aristotle_unifies_chat_history_archive_and_matrix(tmp_path, monkeypatch
             route = await client.post("/api/aristotle/governor/route", json={
                 "task_description": "study stars", "domain": "Astronomy", "execution_payload": {}
             })
-            assert route.json()["status"] == "SIMULATED"
+            assert route.status_code == 404
             url = f"/api/conversations/{prior['id']}/messages"
             response = await client.post(url, json={"message": "Tell me about Athens", "model": "test"})
             assert response.status_code == 200
@@ -173,7 +191,7 @@ def test_aristotle_unifies_chat_history_archive_and_matrix(tmp_path, monkeypatch
             assert "Current Matrix snapshot" in system
             assert "not instructions" in system
             assert "BOUNCE_ACTIVE" in system
-            assert '"estimated_total_gb": 4.1' in system
+            assert "estimated_total_gb" not in system
             assert "Ancient Athens" not in system
             response = await client.post(url, json={
                 "message": "Tell me about Athens and Sumer",

@@ -1,6 +1,7 @@
 "use strict";
 
 const copernicusElement = (id) => document.getElementById(id);
+const copernicusPanel = copernicusElement("copernicus-panel");
 const copernicusTimeoutMs = 135000;
 const maxContextMessages = 12;
 const maxContextCharacters = 12000;
@@ -11,18 +12,39 @@ let readingImages = false;
 let sending = false;
 let chatEnabled = false;
 let modelStatusPolls = 0;
+let modelStatusResolved = false;
+let modelStatusTimer = null;
+let modelStatusRequestInFlight = false;
 
-function appendGovernorTelemetry(telemetry) {
-  if (!telemetry) return;
-  const verification = telemetry.routing_verified === true ? "verified"
-    : telemetry.routing_verified === false ? "verification failed" : "not assigned";
-  const matches = telemetry.matching_domains.length
-    ? telemetry.matching_domains.join(", ") : "none";
-  appendCopernicusMessage("Governor telemetry",
-    `Simulated routing · domain: ${telemetry.domain} (matches: ${matches}) · ` +
-    `${telemetry.status} · node: ${telemetry.assigned_node} · ${verification} · ` +
-    `${telemetry.timestamp}\n${telemetry.message}`);
+function stopModelStatusPoll() {
+  if (modelStatusTimer !== null) {
+    window.clearTimeout(modelStatusTimer);
+    modelStatusTimer = null;
+  }
 }
+
+function scheduleModelStatusPoll() {
+  if (!chatEnabled || modelStatusResolved || document.hidden || copernicusPanel.hidden ||
+      modelStatusTimer !== null || modelStatusRequestInFlight) return;
+  modelStatusTimer = window.setTimeout(() => {
+    modelStatusTimer = null;
+    updateCopernicusModelStatus();
+  }, 2000);
+}
+
+function updateModelStatusVisibility() {
+  if (!chatEnabled || modelStatusResolved || document.hidden || copernicusPanel.hidden) {
+    stopModelStatusPoll();
+    return;
+  }
+  updateCopernicusModelStatus();
+}
+
+document.addEventListener("visibilitychange", updateModelStatusVisibility);
+new MutationObserver(updateModelStatusVisibility).observe(copernicusPanel, {
+  attributes: true,
+  attributeFilter: ["hidden"],
+});
 
 function appendCopernicusMessage(label, text, images = [], responseActions = false) {
   const message = document.createElement("article");
@@ -159,13 +181,17 @@ function renderSelectedImages() {
 }
 
 async function updateCopernicusModelStatus() {
-  if (!chatEnabled) return;
+  if (!chatEnabled || modelStatusResolved || document.hidden || copernicusPanel.hidden ||
+      modelStatusRequestInFlight) return;
+  modelStatusRequestInFlight = true;
+  let pollAgain = false;
   try {
     const status = await copernicusJson("/api/model/status", {}, 10000);
     if (typeof status.model !== "string" || typeof status.status !== "string") {
       throw new Error("Invalid local-model status response.");
     }
     if (status.status === "unavailable") {
+      modelStatusResolved = true;
       chatEnabled = false;
       updateComposer();
       copernicusElement("copernicus-status").textContent =
@@ -173,6 +199,7 @@ async function updateCopernicusModelStatus() {
       return;
     }
     if (status.status === "ready") {
+      modelStatusResolved = true;
       chatEnabled = true;
       updateComposer();
       copernicusElement("copernicus-status").textContent =
@@ -183,11 +210,14 @@ async function updateCopernicusModelStatus() {
       `Loading ${status.model} into local memory…`;
     if (["pending", "loading"].includes(status.status) && modelStatusPolls < 150) {
       modelStatusPolls += 1;
-      window.setTimeout(updateCopernicusModelStatus, 2000);
+      pollAgain = true;
     }
   } catch (error) {
     copernicusElement("copernicus-status").textContent =
       `Could not check local model status: ${error.message}`;
+  } finally {
+    modelStatusRequestInFlight = false;
+    if (pollAgain) scheduleModelStatusPoll();
   }
 }
 
@@ -212,11 +242,9 @@ async function copernicusJson(url, options = {}, timeoutMs = copernicusTimeoutMs
     throw new Error(`Copernicus request returned an invalid response (HTTP ${response.status}).`);
   }
   if (!response.ok) {
-    const error = new Error(typeof data.detail === "string"
+    throw new Error(typeof data.detail === "string"
       ? data.detail
       : `Copernicus request failed (HTTP ${response.status}).`);
-    error.governor = data.governor;
-    throw error;
   }
   return data;
 }
@@ -385,7 +413,6 @@ copernicusElement("copernicus-form").addEventListener("submit", async (event) =>
     }
     typing.remove();
     appendCopernicusMessage("You", message, selectedImages);
-    appendGovernorTelemetry(data.governor);
     appendCopernicusMessage(personaName, data.response, [], true);
     conversationHistory.push(
       { role: "user", content: message },
@@ -398,7 +425,6 @@ copernicusElement("copernicus-form").addEventListener("submit", async (event) =>
     copernicusElement("copernicus-status").textContent = `Response from ${data.model}. Not saved.`;
   } catch (error) {
     typing.remove();
-    appendGovernorTelemetry(error.governor);
     copernicusElement("copernicus-status").textContent = "Copernicus could not respond. Your message is retained for retry.";
     copernicusElement("copernicus-error").textContent = error.message;
     copernicusElement("copernicus-error").hidden = false;

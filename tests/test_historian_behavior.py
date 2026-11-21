@@ -107,6 +107,7 @@ def test_query_brain_sends_local_non_streaming_request(
             "model": "aethersystem-core",
             "prompt": "Check the archive.",
             "stream": False,
+            "think": False,
             "options": {"temperature": 0.2},
         },
         {"Content-Type": "application/json"},
