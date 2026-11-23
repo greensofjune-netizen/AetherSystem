@@ -23,6 +23,14 @@
     newChat: $('new-chat'), refresh: $('refresh'), stop: $('stop-response'),
     retry: $('retry'), progress: $('chat-progress'), nativeVoice: $('native-voice-input')
   };
+  const inscription = {
+    enabled: $('enable-inscriptions'),
+    status: $('inscription-status'),
+    modes: $('inscription-modes'),
+    meaning: $('inscription-meaning'),
+    timer: null,
+    controller: null
+  };
   if ($('include-weather')) {
     $('weather-frame').addEventListener('load', () => {
       weatherContext = null;
@@ -129,8 +137,61 @@
       elements.message.value = characters.slice(0, maxMessageChars).join('');
     }
     elements.messageCount.textContent = `${Math.min(characters.length, maxMessageChars).toLocaleString()} / 8,000 characters`;
+    scheduleInscriptionPreview();
     updateControls();
   }
+
+  function renderInscription(result) {
+    inscription.modes.hidden = false;
+    for (const [name, value] of Object.entries(result.modes)) {
+      const target = inscription.modes.querySelector(`[data-mode="${name}"]`);
+      if (target) target.textContent = value === null
+        ? 'Unavailable — not in the reviewed phrasebook.'
+        : value;
+    }
+    inscription.meaning.textContent = result.meaning
+      ? `Meaning check: ${result.meaning}. ${result.notice}`
+      : result.notice;
+    inscription.status.textContent = result.status;
+  }
+
+  function scheduleInscriptionPreview() {
+    if (!inscription.enabled) return;
+    clearTimeout(inscription.timer);
+    if (!inscription.enabled.checked) {
+      inscription.status.textContent = 'Preview is disabled.';
+      inscription.modes.hidden = true;
+      inscription.meaning.textContent = '';
+      return;
+    }
+    const text = elements.message.value.trim();
+    if (!text) {
+      inscription.status.textContent = 'Enter a draft to preview.';
+      inscription.modes.hidden = true;
+      inscription.meaning.textContent = '';
+      return;
+    }
+    inscription.status.textContent = 'Checking reviewed phrasebook…';
+    inscription.timer = setTimeout(async () => {
+      inscription.controller?.abort();
+      inscription.controller = new AbortController();
+      try {
+        const result = await api('/api/inscriptions/render', {
+          method: 'POST',
+          body: { text },
+          controller: inscription.controller
+        });
+        if (text !== elements.message.value.trim() || !inscription.enabled.checked) return;
+        renderInscription(result);
+      } catch (error) {
+        inscription.status.textContent = `Preview unavailable: ${error.message}`;
+        inscription.modes.hidden = true;
+        inscription.meaning.textContent = '';
+      }
+    }, 250);
+  }
+
+  inscription.enabled?.addEventListener('change', scheduleInscriptionPreview);
 
   function renderList() {
     elements.list.replaceChildren();
@@ -359,6 +420,9 @@
     } else if (availableModels.includes(result.default_model)) {
       elements.model.value = result.default_model;
     }
+    window.dispatchEvent(new CustomEvent('aether-model-ready', {
+      detail: { model: elements.model.value }
+    }));
     updateControls();
   }
 
@@ -435,7 +499,12 @@
       if (!elements.send.disabled) elements.form.requestSubmit();
     }
   });
-  elements.model.addEventListener('change', updateControls);
+  elements.model.addEventListener('change', () => {
+    updateControls();
+    window.dispatchEvent(new CustomEvent('aether-model-ready', {
+      detail: { model: elements.model.value }
+    }));
+  });
   window.AetherSpeech.attachRecognition(elements.voiceInput, elements.message, elements.voiceStatus);
   state.voiceUnsupported = elements.voiceInput.disabled;
   elements.retry.addEventListener('click', () => elements.form.requestSubmit());
@@ -710,7 +779,7 @@
         if (active) item.setAttribute('aria-current', 'page');
         else item.removeAttribute('aria-current');
       });
-      for (const name of ['chat', 'weather', 'stargazer', 'astrology', 'formula', 'workspace', 'propulsion', 'perception', 'matrix', 'history']) {
+      for (const name of ['chat', 'weather', 'stargazer', 'astrology', 'formula', 'genesis', 'darma', 'workspace', 'propulsion', 'perception', 'matrix', 'history']) {
         const panel = $(`${name}-panel`);
         if (panel) panel.hidden = name !== selected;
       }

@@ -106,6 +106,9 @@ textarea { width: 100%; padding: 12px; border: 1px solid var(--border); border-r
 .message-actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 10px; }
 .prompt-suggestions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 14px; }
 .copernicus-form { display: grid; gap: 8px; margin: 20px 0 10px; }
+.copernicus-language-field { display: grid; gap: 6px; padding-bottom: 8px; }
+.copernicus-language-field label { font-size: 0.9rem; font-weight: 600; }
+.copernicus-language-field input { width: min(100%, 440px); }
 .copernicus-form textarea { min-height: 96px; line-height: 1.5; }
 .composer-meta { display: flex; justify-content: space-between; flex-wrap: wrap; gap: 8px; color: var(--muted); font-size: 0.8rem; }
 .copernicus-media { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }

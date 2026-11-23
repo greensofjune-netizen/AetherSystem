@@ -19,6 +19,8 @@ from typing import Any, Literal, NamedTuple
 
 from pydantic import BaseModel, ConfigDict, Field
 
+from .information_transport import load_transport_principles
+
 AETHER_DISPATCH_URL = "http://127.0.0.1:8000/api/v1/unified/dispatch"
 EARTH_RADIUS_KM = 6371.0
 EFFECTIVE_K_FACTOR = 4.0 / 3.0
@@ -473,6 +475,11 @@ def calculate_los_link_budget(
             else "OBSTRUCTED_OR_OUT_OF_RANGE"
         ),
         "model_warnings": model_warnings,
+        "information_transport": {
+            "scope": "EDUCATIONAL_SHARED_LIFECYCLE",
+            "stages": load_transport_principles()["stages"],
+            "transmission_performed": False,
+        },
     }
 
 

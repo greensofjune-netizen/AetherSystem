@@ -1,0 +1,93 @@
+.darma-panel {
+  padding-top: 28px;
+}
+
+.darma-heading {
+  display: flex;
+  justify-content: space-between;
+  gap: 18px;
+  align-items: end;
+}
+
+.darma-heading h2 {
+  margin-top: 7px;
+  font-family: Georgia, serif;
+  font-weight: 400;
+}
+
+.darma-heading p,
+.darma-notice,
+.darma-status {
+  max-width: 620px;
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.55;
+}
+
+.darma-form {
+  display: grid;
+  grid-template-columns: minmax(220px, 1fr) 140px auto;
+  gap: 12px;
+  align-items: end;
+  margin-top: 20px;
+}
+
+.darma-form label {
+  display: grid;
+  gap: 6px;
+  color: var(--muted);
+  font-size: 11px;
+}
+
+.darma-form input {
+  width: 100%;
+  min-height: 44px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 9px 11px;
+  color: var(--text);
+  background: var(--panel);
+  font: inherit;
+}
+
+.darma-report {
+  margin-top: 18px;
+}
+
+.darma-summary {
+  margin-bottom: 12px;
+  color: var(--text);
+  line-height: 1.5;
+}
+
+.darma-table-wrap {
+  overflow-x: auto;
+}
+
+.darma-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 12px;
+}
+
+.darma-table th,
+.darma-table td {
+  padding: 9px;
+  border-bottom: 1px solid var(--line);
+  text-align: left;
+}
+
+.darma-table th {
+  color: var(--gold);
+}
+
+@media (max-width: 700px) {
+  .darma-heading {
+    align-items: start;
+    flex-direction: column;
+  }
+
+  .darma-form {
+    grid-template-columns: 1fr;
+  }
+}

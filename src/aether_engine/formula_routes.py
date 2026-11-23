@@ -6,6 +6,7 @@ from fastapi import APIRouter, HTTPException, Request
 from pydantic import BaseModel, ConfigDict, Field
 
 from .engine_core import EngineCapability, EngineOrchestrator
+from .information_transport import simulate_transport
 from .los_link import (
     PathProfilePoint,
     RadioLinkParameters,
@@ -66,6 +67,13 @@ class LosLinkFormulaRequest(FormulaRequest):
     path_profile: list[PathProfilePoint] | None = Field(default=None, max_length=512)
     weather: WeatherConditions | None = None
     radio: RadioLinkParameters | None = None
+
+
+class InformationTransportRequest(FormulaRequest):
+    value: object
+    bit_error_rate: float = Field(default=0, ge=0, le=1, allow_inf_nan=False)
+    seed: int = Field(default=0, strict=True, ge=0, le=2**32 - 1)
+    chunk_bytes: int = Field(default=128, strict=True, ge=1, le=4096)
 
 
 def _calculate_quantum(entry: QuantumFormulaRequest) -> dict[str, float]:
@@ -141,6 +149,20 @@ def _calculate_los_link(entry: LosLinkFormulaRequest) -> dict[str, object]:
         raise HTTPException(422, str(error)) from error
 
 
+def _simulate_information_transport(
+    entry: InformationTransportRequest,
+) -> dict[str, object]:
+    try:
+        return simulate_transport(
+            entry.value,
+            bit_error_rate=entry.bit_error_rate,
+            seed=entry.seed,
+            chunk_bytes=entry.chunk_bytes,
+        )
+    except ValueError as error:
+        raise HTTPException(422, str(error)) from error
+
+
 QUANTUM_CAPABILITY = EngineCapability("formula.quantum", _calculate_quantum)
 QUANTUM_CIRCUIT_CAPABILITY = EngineCapability(
     "formula.quantum-circuit", _simulate_quantum_circuit
@@ -149,10 +171,14 @@ SPIN_NETWORK_CAPABILITY = EngineCapability(
     "formula.spin-network", _calculate_spin_network
 )
 LOS_LINK_CAPABILITY = EngineCapability("formula.los-link", _calculate_los_link)
+INFORMATION_TRANSPORT_CAPABILITY = EngineCapability(
+    "formula.information-transport", _simulate_information_transport
+)
 formula_engine.register(QUANTUM_CAPABILITY)
 formula_engine.register(QUANTUM_CIRCUIT_CAPABILITY)
 formula_engine.register(SPIN_NETWORK_CAPABILITY)
 formula_engine.register(LOS_LINK_CAPABILITY)
+formula_engine.register(INFORMATION_TRANSPORT_CAPABILITY)
 
 
 @formula_router.post("/api/formulas/quantum")
@@ -179,3 +205,12 @@ def los_link_formula(
     entry: LosLinkFormulaRequest, request: Request
 ) -> dict[str, object]:
     return request.app.state.engine_runtime.execute(LOS_LINK_CAPABILITY, entry)
+
+
+@formula_router.post("/api/formulas/information-transport")
+def information_transport_formula(
+    entry: InformationTransportRequest, request: Request
+) -> dict[str, object]:
+    return request.app.state.engine_runtime.execute(
+        INFORMATION_TRANSPORT_CAPABILITY, entry
+    )

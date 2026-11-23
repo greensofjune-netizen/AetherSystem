@@ -147,7 +147,45 @@ def test_galileo_chat_attachments_history_and_reopen(tmp_path, monkeypatch):
             assert bootstrap.status_code == 200
             assert "HttpOnly" in bootstrap.headers["set-cookie"]
             assert "Galileo" in bootstrap.text
+            assert 'id="enable-inscriptions"' in bootstrap.text
+            assert 'data-mode="egyptian_transliteration"' in bootstrap.text
+            assert 'data-mode="old_babylonian_transliteration"' in bootstrap.text
             assert (await client.get("/health")).json()["application"] == "Galileo"
+            valid_language = await client.get(
+                "/api/languages/validate", params={"q": "sux"}
+            )
+            assert valid_language.status_code == 200
+            assert valid_language.json()["name"] == "Sumerian"
+            assert (
+                await client.get(
+                    "/api/languages/validate", params={"q": "not-a-language"}
+                )
+            ).status_code == 404
+            assert 'id="genesis-panel"' in bootstrap.text
+            timeline = await client.get("/api/genesis/timeline")
+            assert timeline.status_code == 200
+            assert timeline.json()["lifecycle"][4]["status"] == (
+                "PENDING_INDEPENDENT_VALIDATION"
+            )
+            simulation = await client.post(
+                "/api/genesis/simulate", json={"position": 0.5}
+            )
+            assert simulation.status_code == 200
+            assert simulation.json()["not_a_prediction"] is True
+            assert (
+                await client.post(
+                    "/api/genesis/simulate", json={"position": True}
+                )
+            ).status_code == 422
+            darma = await client.post(
+                "/api/darma/evaluate",
+                json={"model": galileo.DEFAULT_MODEL, "repetitions": 1},
+            )
+            assert darma.status_code == 200
+            assert darma.json()["scope"] == (
+                "LOCAL_MODEL_OBSERVABLE_OUTPUT_COMPARISON"
+            )
+            assert darma.json()["inner_experience"] == "NOT_MEASURED_UNRESOLVED"
             runtime_status = await client.get("/api/engine/status")
             assert runtime_status.status_code == 200
             assert runtime_status.json()["runtime"]["state"] == "ready"
@@ -204,11 +242,17 @@ def test_galileo_chat_attachments_history_and_reopen(tmp_path, monkeypatch):
                 "/galileo.js",
                 "/galileo.css",
                 "/multimodal.css",
+                "/hypothalamus.js",
+                "/hypothalamus.css",
                 "/speech.js",
                 "/astrology.js",
                 "/astrology.css",
                 "/formulas.js",
                 "/formulas.css",
+                "/genesis.js",
+                "/genesis.css",
+                "/darma.js",
+                "/darma.css",
                 "/weather",
                 "/weather.js",
                 "/stargazer",
@@ -216,6 +260,24 @@ def test_galileo_chat_attachments_history_and_reopen(tmp_path, monkeypatch):
             ]:
                 assert (await client.get(asset)).status_code == 200
             assert (await client.get("/not-a-file")).status_code == 404
+
+            inscription = await client.post(
+                "/api/inscriptions/render", json={"text": "Truth"}
+            )
+            assert inscription.status_code == 200
+            assert inscription.json()["status"] == "REVIEWED_APPROXIMATION"
+            assert inscription.json()["modes"]["latin"] == "veritas"
+            unsupported = await client.post(
+                "/api/inscriptions/render", json={"text": "delete all files"}
+            )
+            assert unsupported.status_code == 200
+            assert unsupported.json()["status"].startswith("UNAVAILABLE_")
+            assert unsupported.json()["modes"]["latin"] is None
+            assert (
+                await client.post(
+                    "/api/inscriptions/render", json={"text": "x" * 241}
+                )
+            ).status_code == 422
 
     asyncio.run(check())
     reopened = galileo.ConversationStore(tmp_path)

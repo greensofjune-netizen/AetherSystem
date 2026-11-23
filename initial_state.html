@@ -1,0 +1,522 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="dark">
+  <meta http-equiv="Content-Security-Policy"
+    content="default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; connect-src 'self' http://127.0.0.1:11434 http://localhost:11434; img-src 'none'; object-src 'none'; base-uri 'none'; form-action 'none'">
+  <meta name="referrer" content="no-referrer">
+  <title>AetherSystem — Engine Initial State</title>
+  <style>
+    :root {
+      --bg: radial-gradient(circle at top, #182038 0%, #070910 100%);
+      --panel: rgb(16 22 40 / 84%);
+      --text: #eef3ff;
+      --muted: #a6b2cf;
+      --accent: #f05e1b;
+      --safe: #22c55e;
+      --warn: #ef4444;
+      --border: rgb(255 255 255 / 12%);
+    }
+
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+      font-family: system-ui, -apple-system, sans-serif;
+    }
+
+    body {
+      min-height: 100vh;
+      background: var(--bg);
+      color: var(--text);
+      padding: 24px;
+      display: flex;
+      justify-content: center;
+      align-items: flex-start;
+    }
+
+    button,
+    input,
+    select {
+      font: inherit;
+    }
+
+    button:focus-visible,
+    input:focus-visible,
+    select:focus-visible {
+      outline: 2px solid #ffb58c;
+      outline-offset: 3px;
+    }
+
+    .matrix-shell {
+      width: 100%;
+      max-width: 960px;
+      display: grid;
+      gap: 18px;
+    }
+
+    .header-bar,
+    .card {
+      background: var(--panel);
+      backdrop-filter: blur(14px);
+      border: 1px solid var(--border);
+      border-radius: 16px;
+      padding: 18px 22px;
+      box-shadow: 0 14px 40px rgb(0 0 0 / 45%);
+    }
+
+    .header-bar,
+    .comms-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      flex-wrap: wrap;
+      gap: 12px;
+    }
+
+    .brand h1 {
+      font-size: 1.15rem;
+      letter-spacing: 0.05em;
+      text-transform: uppercase;
+    }
+
+    .brand p,
+    .metric-sub,
+    .meta {
+      font-size: 0.82rem;
+      color: var(--muted);
+      margin-top: 4px;
+    }
+
+    .status-pill {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      padding: 6px 14px;
+      border-radius: 999px;
+      font-size: 0.78rem;
+      font-weight: 700;
+      background: rgb(240 94 27 / 16%);
+      border: 1px solid rgb(240 94 27 / 40%);
+      color: var(--accent);
+    }
+
+    .dot {
+      width: 9px;
+      height: 9px;
+      border-radius: 50%;
+      background: var(--safe);
+      box-shadow: 0 0 8px var(--safe);
+    }
+
+    .dot.offline {
+      background: var(--warn);
+      box-shadow: 0 0 8px var(--warn);
+    }
+
+    .grid-3 {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+      gap: 14px;
+    }
+
+    .metric-label {
+      font-size: 0.75rem;
+      color: var(--muted);
+      text-transform: uppercase;
+      letter-spacing: 0.04em;
+    }
+
+    .metric-value {
+      font-size: 1.35rem;
+      font-weight: 700;
+      margin-top: 6px;
+    }
+
+    .safe {
+      color: var(--safe);
+    }
+
+    .comms-header {
+      margin-bottom: 12px;
+    }
+
+    .controls-row {
+      display: flex;
+      gap: 8px;
+      flex-wrap: wrap;
+      align-items: end;
+    }
+
+    .field {
+      display: grid;
+      gap: 5px;
+    }
+
+    .field label {
+      color: var(--muted);
+      font-size: 0.75rem;
+    }
+
+    select,
+    input {
+      min-height: 42px;
+      padding: 9px 12px;
+      border-radius: 10px;
+      border: 1px solid var(--border);
+      background: rgb(255 255 255 / 6%);
+      color: var(--text);
+      font-size: 0.86rem;
+    }
+
+    button {
+      min-height: 42px;
+      padding: 9px 16px;
+      border: 1px solid transparent;
+      border-radius: 10px;
+      background: var(--accent);
+      color: #fff;
+      font-weight: 600;
+      cursor: pointer;
+    }
+
+    button.secondary {
+      background: rgb(255 255 255 / 8%);
+      border-color: var(--border);
+    }
+
+    button:disabled,
+    input:disabled,
+    select:disabled {
+      cursor: not-allowed;
+      opacity: 0.58;
+    }
+
+    .console-log {
+      height: 210px;
+      overflow-y: auto;
+      background: rgb(5 7 14 / 65%);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 12px;
+      font-size: 0.86rem;
+      line-height: 1.45;
+      margin-bottom: 12px;
+      white-space: pre-wrap;
+      overflow-wrap: anywhere;
+    }
+
+    .log-entry {
+      margin-bottom: 10px;
+    }
+
+    .log-meta {
+      font-size: 0.72rem;
+      color: var(--muted);
+    }
+
+    .chat-form {
+      display: flex;
+      gap: 8px;
+    }
+
+    .chat-form input {
+      flex: 1;
+      min-width: 0;
+    }
+
+    .notice {
+      color: var(--muted);
+      font-size: 0.78rem;
+      line-height: 1.5;
+    }
+
+    @media (max-width: 640px) {
+      body {
+        padding: 12px;
+      }
+
+      .header-bar,
+      .card {
+        padding: 16px;
+      }
+
+      .controls-row,
+      .chat-form {
+        width: 100%;
+      }
+
+      .chat-form {
+        align-items: stretch;
+        flex-direction: column;
+      }
+    }
+  </style>
+</head>
+<body>
+  <main class="matrix-shell">
+    <header class="header-bar">
+      <div class="brand">
+        <h1>AetherSystem — Initial State Core</h1>
+        <p id="utc-clock">UTC Sync: Initializing...</p>
+      </div>
+      <div class="status-pill" role="status" aria-live="polite">
+        <span class="dot offline" id="engine-dot" aria-hidden="true"></span>
+        <span id="engine-status">PROBING LOCAL STATE</span>
+      </div>
+    </header>
+
+    <section class="grid-3" aria-label="Initial engine state">
+      <article class="card">
+        <div class="metric-label">Local inference node</div>
+        <div class="metric-value" id="model-name">llama3.2:3b</div>
+        <div class="metric-sub" id="ollama-endpoint">Endpoint: http://127.0.0.1:11434</div>
+      </article>
+      <article class="card">
+        <div class="metric-label">Ethical invariant gate</div>
+        <div class="metric-value safe">READ-ONLY LOCAL MODE</div>
+        <div class="metric-sub">No Matrix writes or physical actions from this page.</div>
+      </article>
+      <article class="card">
+        <div class="metric-label">Advertised sub-systems</div>
+        <div class="metric-value" id="subsystem-count">4 reference nodes</div>
+        <div class="metric-sub">History • Astronomy • Kinetics • Languages</div>
+      </article>
+    </section>
+
+    <section class="card" aria-labelledby="copernicus-link-title">
+      <div class="comms-header">
+        <div>
+          <strong id="copernicus-link-title">Copernicus Companion Link</strong>
+          <span class="metric-sub">Standalone local shell</span>
+        </div>
+        <div class="controls-row">
+          <div class="field">
+            <label for="voice-select">Persona voice</label>
+            <select id="voice-select">
+              <option value="copernicus">Copernicus (Default)</option>
+              <option value="scribe">Historian Scribe</option>
+              <option value="kinetic">Propulsion Lead</option>
+              <option value="jester">Cosmic Jester</option>
+            </select>
+          </div>
+          <div class="field">
+            <label for="lang-input">Response language or ISO code</label>
+            <input id="lang-input" type="text" value="English" maxlength="120"
+              placeholder="English, es, sux" autocapitalize="none" spellcheck="false">
+          </div>
+          <button type="button" class="secondary" id="reset-btn">Probe again</button>
+        </div>
+      </div>
+
+      <div class="console-log" id="console-log" role="log"
+        aria-live="polite" aria-label="Local engine messages"></div>
+
+      <form class="chat-form" id="chat-form">
+        <label class="field" for="prompt-input">
+          <span class="metric-label">Message to Copernicus</span>
+          <input id="prompt-input" type="text" maxlength="4000"
+            placeholder="Send an initial-state prompt..." required>
+        </label>
+        <button type="submit" id="transmit-btn" disabled>Transmit</button>
+      </form>
+      <p class="notice">
+        Served through Aether, this page validates every language selection against the
+        bundled ISO-639 registry before generation. Direct file:// mode is probe-only and
+        cannot transmit. The page does not read or write AetherSystem records.
+      </p>
+    </section>
+  </main>
+
+  <script>
+    "use strict";
+
+    const INITIAL_STATE = Object.freeze({
+      tagsEndpoint: "http://127.0.0.1:11434/api/tags",
+      generateEndpoint: "http://127.0.0.1:11434/api/generate",
+      model: "llama3.2:3b",
+      requestTimeoutMs: 130000
+    });
+
+    const PERSONAS = Object.freeze({
+      copernicus: "You are Copernicus, a warm, observant local companion. You have zero persistent memory and zero write access to Matrix records.",
+      scribe: "You are the Historian Scribe. Speak clearly with archival depth and distinguish evidence from interpretation.",
+      kinetic: "You are the Propulsion Lead. Speak concisely and separate educational models from field measurements.",
+      jester: "You are the Cosmic Jester. Keep things lighthearted with poetic wordplay while preserving factual uncertainty."
+    });
+
+    const elements = {
+      clock: document.getElementById("utc-clock"),
+      dot: document.getElementById("engine-dot"),
+      status: document.getElementById("engine-status"),
+      log: document.getElementById("console-log"),
+      reset: document.getElementById("reset-btn"),
+      form: document.getElementById("chat-form"),
+      prompt: document.getElementById("prompt-input"),
+      transmit: document.getElementById("transmit-btn"),
+      voice: document.getElementById("voice-select"),
+      language: document.getElementById("lang-input")
+    };
+    let online = false;
+    let sending = false;
+    const serviceBacked = /^https?:$/.test(window.location.protocol);
+
+    function getUTC() {
+      return new Date().toISOString();
+    }
+
+    function logMessage(sender, text) {
+      const entry = document.createElement("div");
+      entry.className = "log-entry";
+      const meta = document.createElement("div");
+      meta.className = "log-meta";
+      meta.textContent = `[${getUTC()}] ${sender}`;
+      const body = document.createElement("div");
+      body.textContent = String(text);
+      entry.append(meta, body);
+      elements.log.append(entry);
+      while (elements.log.children.length > 100) {
+        elements.log.firstElementChild.remove();
+      }
+      elements.log.scrollTop = elements.log.scrollHeight;
+    }
+
+    function setOnline(value, availableModels = []) {
+      online = value;
+      elements.dot.classList.toggle("offline", !value);
+      elements.status.textContent = value
+        ? "ENGINE ONLINE (LOCAL PROBE)"
+        : "STANDALONE / OFFLINE";
+      elements.transmit.disabled = !value || sending;
+      if (value) {
+        const names = availableModels
+          .map((model) => model && model.name)
+          .filter((name) => typeof name === "string")
+          .slice(0, 20);
+        logMessage(
+          "COPERNICUS",
+          serviceBacked
+            ? `Local probe succeeded. Models: ${names.join(", ") || "none reported"}. Language selection will be ISO-validated before generation.`
+            : `Local probe succeeded, but generation is disabled from file://. Serve this page through Aether at /initial_state for ISO validation.`
+        );
+        elements.transmit.disabled = !serviceBacked;
+      }
+    }
+
+    async function validateLanguage(language) {
+      if (!serviceBacked) {
+        throw new Error(
+          "ISO language validation is unavailable from file://. Open the Aether /initial_state route."
+        );
+      }
+      const data = await fetchJson(
+        `/api/languages/validate?q=${encodeURIComponent(language)}`
+      );
+      if (!data.valid || !data.name || !data.iso_639_3) {
+        throw new Error("The language registry did not validate this selection.");
+      }
+      return data;
+    }
+
+    async function fetchJson(url, options = {}) {
+      const controller = new AbortController();
+      const timer = window.setTimeout(
+        () => controller.abort(),
+        INITIAL_STATE.requestTimeoutMs
+      );
+      try {
+        const response = await fetch(url, {
+          ...options,
+          signal: controller.signal,
+          cache: "no-store"
+        });
+        const data = await response.json();
+        if (!response.ok) {
+          throw new Error(`HTTP ${response.status}`);
+        }
+        return data;
+      } catch (error) {
+        if (error.name === "AbortError") {
+          throw new Error("Local request timed out.");
+        }
+        throw error;
+      } finally {
+        window.clearTimeout(timer);
+      }
+    }
+
+    async function renderInitialState() {
+      elements.reset.disabled = true;
+      elements.log.replaceChildren();
+      logMessage(
+        "SYSTEM",
+        "Probing loopback Ollama. This proves only local endpoint reachability."
+      );
+      try {
+        const data = await fetchJson(INITIAL_STATE.tagsEndpoint);
+        if (!data || !Array.isArray(data.models)) {
+          throw new Error("Invalid model-list response.");
+        }
+        setOnline(true, data.models);
+      } catch (error) {
+        setOnline(false);
+        logMessage(
+          "SYSTEM",
+          `Local Ollama unavailable: ${error.message}. Start it with origin access configured for this standalone page.`
+        );
+      } finally {
+        elements.reset.disabled = false;
+      }
+    }
+
+    elements.reset.addEventListener("click", renderInitialState);
+
+    elements.form.addEventListener("submit", async (event) => {
+      event.preventDefault();
+      const message = elements.prompt.value.trim();
+      const language = elements.language.value.trim() || "English";
+      if (!message || !online || sending) return;
+
+      sending = true;
+      elements.transmit.disabled = true;
+      elements.prompt.disabled = true;
+      logMessage("USER", message);
+      elements.prompt.value = "";
+
+      try {
+        const validatedLanguage = await validateLanguage(language);
+        const data = await fetchJson(INITIAL_STATE.generateEndpoint, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            model: INITIAL_STATE.model,
+            system: `${PERSONAS[elements.voice.value]} Respond fluently in ${validatedLanguage.name} (ISO 639-3: ${validatedLanguage.iso_639_3}).`,
+            prompt: `[UTC_SYNC: ${getUTC()}] ${message}`,
+            stream: false
+          })
+        });
+        if (typeof data.response !== "string" || !data.response.trim()) {
+          throw new Error("Ollama returned no response text.");
+        }
+        logMessage(elements.voice.value.toUpperCase(), data.response.trim());
+      } catch (error) {
+        setOnline(false);
+        logMessage("SYSTEM", `Generation failed safely: ${error.message}`);
+      } finally {
+        sending = false;
+        elements.prompt.disabled = false;
+        elements.transmit.disabled = !online;
+        elements.prompt.focus();
+      }
+    });
+
+    window.setInterval(() => {
+      elements.clock.textContent = `UTC Sync: ${getUTC()}`;
+    }, 1000);
+
+    void renderInitialState();
+  </script>
+</body>
+</html>

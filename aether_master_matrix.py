@@ -14,6 +14,7 @@ import sqlite3
 import sys
 import tempfile
 from datetime import datetime, timezone
+from functools import lru_cache
 from http import HTTPStatus
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
@@ -45,6 +46,10 @@ from aether_engine.multimodal import (
     validate_image_batch,
 )
 from aether_engine.propulsion_matrix import KineticPropulsionArchive
+from copernicus_language_bridge import (
+    CopernicusLanguageBridge,
+    CopernicusLanguageError,
+)
 from equilibrium_peer_review import calculate_equilibrium, calculate_state_weights
 from history_matrix_archive import UniversalHistoryArchive
 from matrix_academic_benchmarks import MatrixAcademicBenchmarkSuite
@@ -66,6 +71,11 @@ MAX_TEST_DRIVE_STEPS = 1_000
 MAX_TEST_DRIVE_INTERVAL_SECONDS = 60.0
 MAX_CHAT_HISTORY_MESSAGES = 12
 MAX_CHAT_HISTORY_CHARACTERS = 12_000
+
+
+@lru_cache(maxsize=1)
+def _copernicus_language_bridge() -> CopernicusLanguageBridge:
+    return CopernicusLanguageBridge()
 
 
 def _matrix_recovery_readiness_report() -> dict[str, object]:
@@ -207,6 +217,8 @@ _DASHBOARD_HTML = """<!DOCTYPE html>
     <meta name="description" content="AetherSystem local operations dashboard with simulated system metrics and read-only arts telemetry.">
     <meta name="theme-color" content="#120b07">
     <title>AetherSystem | Local Operations Dashboard</title>
+    <link rel="stylesheet" href="/hypothalamus.css">
+    <script src="/hypothalamus.js" defer></script>
     <style>
         :root {
             color-scheme:dark;
@@ -317,6 +329,7 @@ _DASHBOARD_HTML = """<!DOCTYPE html>
                 <div class="telemetry-row">Simulation Log <span>__LOG_STATUS__</span></div>
                 <h3>Oracle Flame</h3>
                 <canvas id="scopeCanvas" aria-hidden="true"></canvas>
+                <aether-hypothalamus></aether-hypothalamus>
                 <p class="code-quote">"Let the strong not oppress the weak; let the record be true." — in the spirit of the ancient codes</p>
             </section>
             <section class="panel" aria-label="Arts and link telemetry">
@@ -1201,18 +1214,49 @@ class HistorianLiveServer(BaseHTTPRequestHandler):
                     {"enabled": True, "model": COPERNICUS_MODEL},
                 )
             return
+        if path == "/api/languages/validate":
+            if not self._allow_local_request():
+                return
+            query = parse_qs(urlsplit(self.path).query).get("q", [""])[0]
+            try:
+                language = _copernicus_language_bridge().lookup_language(query)
+            except ValueError as error:
+                self._send_json(
+                    HTTPStatus.UNPROCESSABLE_ENTITY, {"detail": str(error)}
+                )
+                return
+            if language is None:
+                self._send_json(
+                    HTTPStatus.NOT_FOUND,
+                    {"detail": "Unknown ISO-639 code or language name."},
+                )
+                return
+            self._send_json(
+                HTTPStatus.OK,
+                {
+                    "valid": True,
+                    "name": language["name"],
+                    "iso_639_3": language["iso_639_3"],
+                    "iso_639_1": language.get("iso_639_1"),
+                    "type": language.get("type"),
+                },
+            )
+            return
         if path == "/api/model/status":
             if self._allow_local_request():
                 self._send_json(HTTPStatus.OK, dict(_copernicus_model_status))
             return
 
         frontend_assets = {
+            "/initial_state": ("initial_state.html", "text/html; charset=utf-8"),
             "/weather": ("weather.html", "text/html; charset=utf-8"),
             "/weather.css": ("weather.css", "text/css; charset=utf-8"),
             "/weather.js": ("weather.js", "text/javascript; charset=utf-8"),
             "/copernicus.js": ("copernicus.js", "text/javascript; charset=utf-8"),
             "/persona_matrix.js": ("persona_matrix.js", "text/javascript; charset=utf-8"),
             "/persona_matrix.css": ("persona_matrix.css", "text/css; charset=utf-8"),
+            "/hypothalamus.js": ("hypothalamus.js", "text/javascript; charset=utf-8"),
+            "/hypothalamus.css": ("hypothalamus.css", "text/css; charset=utf-8"),
             "/stargazer": ("stargazer.html", "text/html; charset=utf-8"),
             "/stargazer.css": ("stargazer.css", "text/css; charset=utf-8"),
             "/stargazer.js": ("stargazer.js", "text/javascript; charset=utf-8"),
@@ -1221,11 +1265,16 @@ class HistorianLiveServer(BaseHTTPRequestHandler):
         }
         if path in frontend_assets:
             filename, content_type = frontend_assets[path]
-            asset_directory = Path(__file__).resolve().parent / "frontend"
-            if not asset_directory.is_dir():
-                asset_directory = (
-                    Path(sys.prefix) / "share" / "aether-engine" / "observatory"
-                )
+            if path == "/initial_state":
+                asset_directory = Path(__file__).resolve().parent
+                if not (asset_directory / filename).is_file():
+                    asset_directory = Path(sys.prefix) / "share" / "aether-engine"
+            else:
+                asset_directory = Path(__file__).resolve().parent / "frontend"
+                if not asset_directory.is_dir():
+                    asset_directory = (
+                        Path(sys.prefix) / "share" / "aether-engine" / "observatory"
+                    )
             try:
                 content = (asset_directory / filename).read_bytes()
             except OSError as error:
@@ -1264,6 +1313,14 @@ class HistorianLiveServer(BaseHTTPRequestHandler):
                 "img-src 'self' blob:; frame-src 'self'; frame-ancestors 'self'; "
                 "base-uri 'none'; form-action 'none'"
             )
+            if path == "/initial_state":
+                policy = (
+                    "default-src 'none'; style-src 'unsafe-inline'; "
+                    "script-src 'unsafe-inline'; connect-src 'self' "
+                    "http://127.0.0.1:11434 http://localhost:11434; "
+                    "img-src 'none'; object-src 'none'; base-uri 'none'; "
+                    "frame-ancestors 'none'; form-action 'none'"
+                )
             if path.startswith("/stargazer"):
                 policy = (
                     "default-src 'none'; style-src 'self'; script-src 'self'; connect-src 'self'; "
@@ -1272,8 +1329,8 @@ class HistorianLiveServer(BaseHTTPRequestHandler):
         elif path == "/":
             content_type = "text/html; charset=utf-8"
             policy = (
-                "default-src 'none'; style-src 'unsafe-inline'; "
-                f"script-src 'sha256-{_DASHBOARD_INLINE_SCRIPT_HASH}'; "
+                "default-src 'none'; style-src 'self' 'unsafe-inline'; "
+                f"script-src 'self' 'sha256-{_DASHBOARD_INLINE_SCRIPT_HASH}'; "
                 "connect-src 'self'; frame-src 'self'; frame-ancestors 'none'; "
                 "base-uri 'none'; form-action 'self'; object-src 'none'"
             )
@@ -1505,7 +1562,15 @@ class HistorianLiveServer(BaseHTTPRequestHandler):
         if (
             not isinstance(payload, dict)
             or not {"message"} <= set(payload)
-            or set(payload) - {"message", "weather_context", "images", "history", "persona"}
+            or set(payload)
+            - {
+                "message",
+                "weather_context",
+                "images",
+                "history",
+                "persona",
+                "target_language",
+            }
         ):
             self._send_json(
                 HTTPStatus.UNPROCESSABLE_ENTITY,
@@ -1519,6 +1584,26 @@ class HistorianLiveServer(BaseHTTPRequestHandler):
             self._send_json(
                 HTTPStatus.UNPROCESSABLE_ENTITY,
                 {"detail": "Message must contain 1 to 4000 characters."},
+            )
+            return
+        target_language = payload.get("target_language", "English")
+        if (
+            not isinstance(target_language, str)
+            or not target_language.strip()
+            or len(target_language) > 120
+        ):
+            self._send_json(
+                HTTPStatus.UNPROCESSABLE_ENTITY,
+                {"detail": "Language must contain 1 to 120 characters."},
+            )
+            return
+        try:
+            language_bridge = _copernicus_language_bridge()
+            language_directive = language_bridge.language_directive(target_language)
+        except (CopernicusLanguageError, ValueError) as error:
+            self._send_json(
+                HTTPStatus.UNPROCESSABLE_ENTITY,
+                {"detail": str(error)},
             )
             return
         persona_key = payload.get("persona", "copernicus_core")
@@ -1658,6 +1743,7 @@ class HistorianLiveServer(BaseHTTPRequestHandler):
                 "synchronization with another system."
             )
             system += " Conversation style: " + PERSONAS[persona_key]["prompt"]
+            system += " Language mode: " + language_directive
             system += "\n\n" + AUTONOMY_SYSTEM_POLICY
             try:
                 archive_context = UniversalHistoryArchive().context_for_message(

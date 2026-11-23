@@ -373,6 +373,7 @@ copernicusElement("copernicus-form").addEventListener("submit", async (event) =>
 
   sending = true;
   const personaSelector = copernicusElement("persona-selector");
+  const targetLanguage = copernicusElement("copernicus-language").value.trim();
   if (personaSelector) personaSelector.disabled = true;
   const persona = window.VoiceMatrix?.activePersona;
   const personaName = window.VoiceMatrix?.name || "Copernicus";
@@ -399,6 +400,7 @@ copernicusElement("copernicus-form").addEventListener("submit", async (event) =>
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         message,
+        target_language: targetLanguage || "English",
         ...(persona ? { persona } : {}),
         ...(history.length ? { history } : {}),
         images: selectedImages.map(({ name, media_type, data }) => ({

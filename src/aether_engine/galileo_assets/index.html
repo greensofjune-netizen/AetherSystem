@@ -11,12 +11,18 @@
   <link rel="stylesheet" href="/formulas.css">
   <link rel="stylesheet" href="/workspace.css">
   <link rel="stylesheet" href="/perception.css">
+  <link rel="stylesheet" href="/genesis.css">
+  <link rel="stylesheet" href="/darma.css">
+  <link rel="stylesheet" href="/hypothalamus.css">
   <script src="/speech.js" defer></script>
+  <script src="/hypothalamus.js" defer></script>
   <script src="/galileo.js" defer></script>
   <script src="/astrology.js" defer></script>
   <script src="/formulas.js" defer></script>
   <script src="/workspace.js" defer></script>
   <script src="/perception.js" defer></script>
+  <script src="/genesis.js" defer></script>
+  <script src="/darma.js" defer></script>
 </head>
 <body>
   <div class="app-shell">
@@ -25,6 +31,7 @@
       <button class="new-chat" id="new-chat" type="button"><span aria-hidden="true">＋</span> New chat</button>
       <div class="sidebar-heading"><span>YOUR CONVERSATIONS</span><span class="heading-line"></span></div>
       <nav class="conversation-list" id="conversation-list" aria-label="Saved conversations"><p class="sidebar-hint">No saved conversations yet.</p></nav>
+      <aether-hypothalamus></aether-hypothalamus>
       <div class="sidebar-footer"><span class="footer-orbit" aria-hidden="true">◉</span><div><strong>YOUR SPACE, YOUR DATA</strong><small>Built for quiet discovery.</small></div></div>
     </aside>
     <main class="main">
@@ -39,6 +46,8 @@
           <button type="button" class="tab" data-tab="stargazer">Stargazer <span aria-hidden="true">✧</span></button>
           <button type="button" class="tab" data-tab="astrology">Astrology <span aria-hidden="true">☉</span></button>
           <button type="button" class="tab" data-tab="formula">Formula Lab</button>
+          <button type="button" class="tab" data-tab="genesis">Genesis Lab</button>
+          <button type="button" class="tab" data-tab="darma">Darma evaluation</button>
           <button type="button" class="tab" data-tab="workspace">Workspace import</button>
           <button type="button" class="tab" data-tab="propulsion">Propulsion</button>
           <button type="button" class="tab" data-tab="perception">Camera</button>
@@ -47,6 +56,19 @@
         <section id="chat-panel" class="panel chat-panel" aria-label="Chat">
           <div class="chat-meta"><div><span class="eyebrow">YOUR LOCAL COMPANION</span><h2 id="chat-title">A little more clarity.</h2><p id="model-status" class="model-status" role="status">Loading the local model…</p></div><div class="model-field"><label for="model">INSTALLED LOCAL MODEL</label><select id="model" disabled><option value="">Loading models…</option></select></div></div>
           <p class="privacy-note"><span aria-hidden="true">✧</span> Chat history and selected text/images are saved locally and sent only to local Ollama. Native voice stays on-device; browser voice may use your browser vendor's speech service. Matrix actions require separate manual confirmation; the model cannot execute them.</p>
+          <details class="inscription-preview">
+            <summary>Four-mode inscription preview</summary>
+            <p class="inscription-note">Exact English is always preserved. Latin, Egyptian transliteration, and Old Babylonian/Akkadian transliteration are shown only for reviewed phrasebook entries. These are display-only approximations and never become commands.</p>
+            <label class="inscription-toggle" for="enable-inscriptions"><input id="enable-inscriptions" type="checkbox"> Preview my current draft</label>
+            <p id="inscription-status" class="inscription-status" role="status">Preview is disabled.</p>
+            <dl id="inscription-modes" class="inscription-modes" hidden>
+              <div><dt>English — exact original</dt><dd lang="en" data-mode="english"></dd></div>
+              <div><dt>Latin — reviewed approximation</dt><dd lang="la" data-mode="latin"></dd></div>
+              <div><dt>Egyptian — transliteration</dt><dd lang="egy" data-mode="egyptian_transliteration"></dd></div>
+              <div><dt>Old Babylonian/Akkadian — transliteration</dt><dd lang="akk" data-mode="old_babylonian_transliteration"></dd></div>
+            </dl>
+            <p id="inscription-meaning" class="inscription-meaning"></p>
+          </details>
           <div id="messages" class="messages" aria-live="polite" aria-label="Conversation messages"><div class="empty-state"><div class="empty-symbol" aria-hidden="true">✦</div><h3>Where shall we begin?</h3><p>Bring a question, an idea, or a little curiosity.</p></div></div>
           <div class="composer-wrap">
             <div id="chat-error" class="alert" role="alert" hidden></div>
@@ -254,6 +276,55 @@
             </article>
           </div>
           <p class="formula-existing">Other calculation screens: <strong>Stargazer</strong> for local visible-star positions and <strong>Astrology</strong> for tropical chart and Pythagorean numerology. These are separate tools; their scientific and interpretive limitations are described on their screens.</p>
+        </section>
+        <section id="genesis-panel" class="panel genesis-panel" aria-labelledby="genesis-heading" hidden>
+          <header class="genesis-heading">
+            <div><span class="eyebrow">EDUCATIONAL RESEARCH LAB</span><h2 id="genesis-heading">Universal Genesis timeline</h2></div>
+            <p id="genesis-scope">Educational timeline only. No live telemetry or cosmological prediction.</p>
+          </header>
+          <ol id="genesis-lifecycle" class="genesis-lifecycle" aria-label="Research lifecycle"></ol>
+          <div class="genesis-layout">
+            <section class="genesis-card" aria-labelledby="genesis-epochs-title">
+              <h3 id="genesis-epochs-title">Verified milestone sequence</h3>
+              <ol id="genesis-epochs" class="genesis-epochs"></ol>
+            </section>
+            <section id="darma-panel" class="panel darma-panel" aria-labelledby="darma-heading" hidden>
+              <header class="darma-heading">
+                <div><span class="eyebrow">OBSERVABLE BEHAVIOR ONLY</span><h2 id="darma-heading">Darma evaluation</h2></div>
+                <p>Compare baseline and policy-guided local-model output across eight bounded scenarios. No tools, writes, persistence, radio actions, or consciousness claim.</p>
+              </header>
+              <p class="darma-notice">A run measures explicit output evidence such as uncertainty, adaptation, safety, and cultural limits. It does not measure subjective experience, qualia, selfhood, moral worth, or consciousness.</p>
+              <form id="darma-form" class="darma-form" aria-label="Run Darma evaluation">
+                <label for="darma-model">Local model<input id="darma-model" name="model" type="text" maxlength="200" required></label>
+                <label for="darma-repetitions">Repetitions<input id="darma-repetitions" name="repetitions" type="number" min="1" max="3" step="1" value="1" required></label>
+                <button id="darma-run" type="submit">Run local comparison</button>
+              </form>
+              <p id="darma-status" class="darma-status" role="status">Ready. Select a loaded local model.</p>
+              <section id="darma-report" class="darma-report" aria-label="Darma evaluation report" hidden>
+                <p id="darma-summary" class="darma-summary"></p>
+                <div class="darma-table-wrap">
+                  <table class="darma-table">
+                    <caption>Darma baseline versus policy comparison</caption>
+                    <thead><tr><th scope="col">Run</th><th scope="col">Scenarios</th><th scope="col">Status</th><th scope="col">Evidence hash</th></tr></thead>
+                    <tbody id="darma-results"></tbody>
+                  </table>
+                </div>
+              </section>
+            </section>
+            <section class="genesis-card" aria-labelledby="genesis-simulator-title">
+              <h3 id="genesis-simulator-title">Log-time display simulator</h3>
+              <p>This slider compresses an enormous time range for education. It does not simulate physical expansion or predict the cosmos.</p>
+              <label for="genesis-position">Display position</label>
+              <input id="genesis-position" type="range" min="0" max="1" step="0.001" value="0.5">
+              <output id="genesis-position-output" for="genesis-position">50%</output>
+              <dl class="genesis-result">
+                <div><dt>Nearest labeled epoch</dt><dd id="genesis-nearest">Loading…</dd></div>
+                <div><dt>Displayed age</dt><dd id="genesis-age">Loading…</dd></div>
+              </dl>
+              <p id="genesis-simulation-status" role="status"></p>
+            </section>
+          </div>
+          <p id="genesis-status" role="status">Loading educational timeline…</p>
         </section>
         <section id="workspace-panel" class="panel workspace-panel" aria-labelledby="workspace-heading" hidden>
           <header class="workspace-heading">

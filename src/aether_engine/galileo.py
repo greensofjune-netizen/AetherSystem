@@ -25,18 +25,23 @@ from fastapi import FastAPI, HTTPException, Query, Request
 from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, Response
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
+from copernicus_language_bridge import CopernicusLanguageBridge
 from workspace_matrix_bridge import MAX_BATCH_RECORDS, EthicalWorkspaceBridge
 
 from .astrology import NatalChartRequest, calculate_natal_chart
 from .astronomy_engine import get_astronomy_engine
 from .autonomy_policy import AUTONOMY_SYSTEM_POLICY
+from .darma_evaluation import evaluate_darma_comparison
 from .engine_runtime import EngineConfig, EngineNotReadyError, EngineRuntime
 from .formula_routes import formula_engine, formula_router
+from .genesis_timeline import simulate_display_position
+from .genesis_timeline import snapshot as genesis_snapshot
 from .inference_scheduler import (
     InferenceCapacityError,
     InferenceQueueTimeoutError,
     InferenceSchedulerClosedError,
 )
+from .inscriptions import render_inscription
 from .local_ai_runtime import (
     DEFAULT_LOCAL_MODEL,
     LocalModelUnavailableError,
@@ -439,6 +444,22 @@ class PerceptionFeedback(BaseModel):
     content: str = Field(min_length=1, max_length=500)
 
 
+class InscriptionRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    text: str = Field(min_length=1, max_length=240)
+
+
+class DarmaEvaluationRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    model: str = Field(min_length=1, max_length=200)
+    repetitions: int = Field(default=1, strict=True, ge=1, le=3)
+
+
+class GenesisPositionRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    position: float = Field(ge=0, le=1, strict=True)
+
+
 class WorkspaceImportRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
     records: list[dict[str, Any]] = Field(min_length=1, max_length=MAX_BATCH_RECORDS)
@@ -486,6 +507,7 @@ def create_app(
     active_chats_lock = Lock()
     assets = Path(__file__).with_name("galileo_assets")
     observatory = observatory_directory()
+    language_bridge = CopernicusLanguageBridge()
 
     @app.middleware("http")
     async def local_access(request: Request, call_next: Any) -> Response:
@@ -982,6 +1004,53 @@ def create_app(
     def sky_chat_status() -> dict[str, str | bool]:
         return {"enabled": True, "model": default_model}
 
+    @app.post("/api/inscriptions/render")
+    def render_quad_inscription(entry: InscriptionRequest) -> dict[str, Any]:
+        try:
+            return render_inscription(entry.text)
+        except ValueError as error:
+            raise HTTPException(422, str(error)) from error
+
+    @app.get("/api/languages/validate")
+    def validate_language(
+        q: str = Query(..., min_length=1, max_length=120),
+    ) -> dict[str, Any]:
+        language = language_bridge.lookup_language(q)
+        if language is None:
+            raise HTTPException(
+                404, "Unknown ISO-639 code or language name."
+            )
+        return {
+            "valid": True,
+            "name": language["name"],
+            "iso_639_3": language["iso_639_3"],
+            "iso_639_1": language.get("iso_639_1"),
+            "type": language.get("type"),
+        }
+
+    @app.get("/api/genesis/timeline")
+    def genesis_timeline() -> dict[str, Any]:
+        return genesis_snapshot()
+
+    @app.post("/api/genesis/simulate")
+    def genesis_simulation(entry: GenesisPositionRequest) -> dict[str, Any]:
+        return simulate_display_position(entry.position)
+
+    @app.post("/api/darma/evaluate")
+    def darma_evaluate(
+        entry: DarmaEvaluationRequest, request: Request
+    ) -> dict[str, Any]:
+        try:
+            return evaluate_darma_comparison(
+                request.app.state.engine_runtime,
+                entry.model,
+                repetitions=entry.repetitions,
+            )
+        except (EngineNotReadyError, OllamaProviderError) as error:
+            raise HTTPException(503, str(error)) from error
+        except (ValueError, RuntimeError) as error:
+            raise HTTPException(422, str(error)) from error
+
     @app.post("/api/astrology/chart")
     def astrology_chart(entry: NatalChartRequest) -> dict[str, object]:
         try:
@@ -1027,6 +1096,10 @@ def create_app(
             "aristotle.css": (assets / "aristotle.css", "text/css"),
             "formulas.js": (assets / "formulas.js", "text/javascript"),
             "formulas.css": (assets / "formulas.css", "text/css"),
+            "genesis.js": (assets / "genesis.js", "text/javascript"),
+            "genesis.css": (assets / "genesis.css", "text/css"),
+            "darma.js": (assets / "darma.js", "text/javascript"),
+            "darma.css": (assets / "darma.css", "text/css"),
             "workspace.js": (assets / "workspace.js", "text/javascript"),
             "workspace.css": (assets / "workspace.css", "text/css"),
             "speech.js": (observatory / "speech.js", "text/javascript"),
@@ -1036,6 +1109,8 @@ def create_app(
             "multimodal.css": (assets / "multimodal.css", "text/css"),
             "perception.js": (assets / "perception.js", "text/javascript"),
             "perception.css": (assets / "perception.css", "text/css"),
+            "hypothalamus.js": (observatory / "hypothalamus.js", "text/javascript"),
+            "hypothalamus.css": (observatory / "hypothalamus.css", "text/css"),
             "weather.js": (observatory / "weather.js", "text/javascript"),
             "weather.css": (observatory / "weather.css", "text/css"),
             "astronomy.css": (observatory / "astronomy.css", "text/css"),

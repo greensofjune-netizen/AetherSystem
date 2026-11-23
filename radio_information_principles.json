@@ -1,0 +1,29 @@
+{
+  "schema_version": 1,
+  "scope": "Educational information lifecycle; no radio transmission or hardware control",
+  "stages": [
+    "validate_source",
+    "serialize",
+    "segment",
+    "checksum",
+    "encode",
+    "modulation_model",
+    "channel_simulation",
+    "demodulation_model",
+    "decode",
+    "integrity_verification"
+  ],
+  "principles": [
+    "Code defines meaning and procedure; radio waves are the physical carrier.",
+    "Modulation is the modeled bridge between bits and a physical waveform.",
+    "Validation and integrity checks must occur before and after transport.",
+    "A channel simulation is not a live radio measurement.",
+    "Positive modeled link margin does not prove transmission permission, safety, or field reliability.",
+    "No engine may transmit, tune, key, or actuate radio hardware through this framework."
+  ],
+  "darma_rules": [
+    "Use this lifecycle when explaining communications metaphors or music transmission.",
+    "Separate information meaning, encoding, transport, and receiver interpretation.",
+    "Never claim that a modeled packet was physically sent."
+  ]
+}

@@ -54,6 +54,32 @@
         <button type="button" class="suggestion-button" data-prompt="What can you tell me about the night sky?">Explore the sky</button>
       </div>
       <form id="copernicus-form" class="copernicus-form">
+        <div class="copernicus-language-field">
+          <label for="copernicus-language">Response language</label>
+          <input id="copernicus-language" name="target_language" type="text"
+            list="copernicus-languages" value="English" maxlength="120"
+            autocapitalize="none" spellcheck="false"
+            aria-describedby="copernicus-language-hint">
+          <datalist id="copernicus-languages">
+            <option value="English"></option>
+            <option value="Spanish"></option>
+            <option value="French"></option>
+            <option value="German"></option>
+            <option value="Arabic"></option>
+            <option value="Mandarin Chinese"></option>
+            <option value="Hindi"></option>
+            <option value="Japanese"></option>
+            <option value="Korean"></option>
+            <option value="Portuguese"></option>
+            <option value="Russian"></option>
+            <option value="Swahili (individual language)"></option>
+            <option value="Latin"></option>
+            <option value="Ancient Greek (to 1453)"></option>
+            <option value="Sumerian"></option>
+            <option value="Akkadian"></option>
+          </datalist>
+          <span id="copernicus-language-hint" class="meta">Enter any ISO-639 code or registered language name. Ancient terms are transliteration-first.</span>
+        </div>
         <label for="copernicus-message">Message to Copernicus</label>
         <textarea id="copernicus-message" maxlength="4000" rows="3" required
           placeholder="Ask a question or share what you’re thinking…"

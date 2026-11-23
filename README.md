@@ -166,6 +166,35 @@ not persisted. It also exposes the Symbiotic Equilibrium blueprint as an
 in-memory stewardship simulator; its branch pruning never operates on project
 files, archives, or live services.
 
+The Darma evaluation panel compares a local model's baseline output against
+the Darma empathy/adaptability policy over eight bounded scenarios. Results
+report per-run hashes, failures, and repetition counts, but do not measure
+subjective experience or establish consciousness. Darma has no tools or
+external actions during these evaluations.
+
+Copernicus can also request responses in any language found by ISO 639-1 or
+ISO 639-3 code or by its registered name. Build or refresh the local 7,928-entry
+registry from the official SIL table with:
+
+```bash
+python3 build_world_languages_json.py
+```
+
+For reproducible offline builds, download the `iso-639-3.tab` source first and
+run `python3 build_world_languages_json.py --source /path/to/iso-639-3.tab`.
+The generated manifest records the source URL and SHA-256. Copernicus remains
+stateless with no Historian or Matrix write access; language selection changes
+the response directive only. Historical/ancient languages are explicitly
+instructed to use marked transliteration and English glosses rather than invent
+scripts.
+
+The chat composer can preview a small, reviewed four-mode phrasebook in exact
+English, Latin, Egyptian transliteration, and Old Babylonian/Akkadian
+transliteration. Unsupported modern phrases fail closed with no invented
+translation. These renderings are display-only approximations, are never saved
+as chat commands, and should not be used as scholarly, legal, clinical, or
+operational instructions.
+
 ```bash
 .venv/bin/python build_aristotle.py --output-dir dist/aristotle-ready
 open "dist/aristotle-ready/Matrix Aristotle.app"

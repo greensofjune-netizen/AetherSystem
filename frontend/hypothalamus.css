@@ -1,0 +1,146 @@
+aether-hypothalamus {
+    display: block;
+    margin-top: 16px;
+}
+
+.hypothalamus-visual {
+    overflow: hidden;
+    position: relative;
+    padding: 12px;
+    border: 1px solid rgb(198 151 72 / 35%);
+    border-radius: 4px;
+    background:
+        radial-gradient(circle at 50% 62%, rgb(255 122 26 / 10%), transparent 46%),
+        rgb(8 13 17 / 78%);
+}
+
+.hypothalamus-copy {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 12px;
+}
+
+.hypothalamus-copy strong {
+    color: #f0c36a;
+    font-size: 11px;
+    letter-spacing: 1.5px;
+    text-transform: uppercase;
+}
+
+.hypothalamus-eyebrow {
+    color: #d9d0bd;
+    font-size: 9px;
+    letter-spacing: 2px;
+}
+
+.hypothalamus-visual svg {
+    display: block;
+    width: 100%;
+    height: auto;
+    max-height: 132px;
+}
+
+.brain-outline {
+    stroke: #b88f47;
+    stroke-width: 1.4;
+}
+
+.brain-fold {
+    fill: none;
+    stroke: #728a83;
+    stroke-width: 1.2;
+    stroke-linecap: round;
+    opacity: 0.72;
+}
+
+.signal-path {
+    fill: none;
+    stroke: #ff9a3c;
+    stroke-width: 1.2;
+    stroke-dasharray: 4 7;
+    opacity: 0.58;
+}
+
+.hypothalamus-node {
+    fill: #ffbb69;
+    filter: drop-shadow(0 0 5px rgb(255 122 26 / 90%));
+}
+
+.hypothalamus-pulse-ring {
+    fill: none;
+    stroke: #ff9a3c;
+    stroke-width: 1.5;
+}
+
+.signal-dot {
+    fill: #f2d59a;
+}
+
+.hypothalamus-motion-toggle {
+    min-height: 32px;
+    padding: 5px 10px;
+    border: 1px solid rgb(198 151 72 / 45%);
+    border-radius: 2px;
+    color: #e8d9bd;
+    background: rgb(22 16 12 / 80%);
+    font: inherit;
+    font-size: 10px;
+    letter-spacing: 1px;
+    cursor: pointer;
+}
+
+.hypothalamus-motion-toggle:focus-visible {
+    outline: 2px solid #f0c36a;
+    outline-offset: 2px;
+}
+
+.hypothalamus-visual p {
+    margin: 8px 0 0;
+    color: #a99d88;
+    font-size: 10px;
+    line-height: 1.45;
+}
+
+.hypothalamus-visual[data-motion="true"] .hypothalamus-pulse-ring {
+    transform-box: fill-box;
+    transform-origin: center;
+    animation: hypothalamus-pulse 3.2s ease-in-out infinite;
+}
+
+.hypothalamus-visual[data-motion="true"] .signal-dot {
+    animation: hypothalamus-signal 4.8s ease-in-out infinite;
+}
+
+.hypothalamus-visual[data-motion="true"] .signal-dot-two {
+    animation-delay: -1.6s;
+}
+
+@keyframes hypothalamus-pulse {
+    0%, 100% {
+        opacity: 0.25;
+        transform: scale(0.9);
+    }
+    50% {
+        opacity: 0.8;
+        transform: scale(1.18);
+    }
+}
+
+@keyframes hypothalamus-signal {
+    0%, 100% {
+        opacity: 0.25;
+        transform: translateX(0);
+    }
+    50% {
+        opacity: 0.95;
+        transform: translateX(7px);
+    }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .hypothalamus-pulse-ring,
+    .signal-dot {
+        animation: none;
+    }
+}

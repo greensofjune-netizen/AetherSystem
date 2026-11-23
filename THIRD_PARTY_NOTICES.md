@@ -4,6 +4,15 @@ The root [MIT license](./LICENSE) applies to original Aether Engine material.
 It does not replace the licenses of dependencies, downloaded model weights,
 or third-party materials.
 
+## ISO 639-3 language registry
+
+`src/aether_engine/world_languages_full.json` is derived from the ISO 639-3
+code table published by SIL at
+`https://iso639-3.sil.org/code_tables/download_tables`. The generated manifest
+records the source URL and byte-level SHA-256 digest. The registry is reference
+data, not original Aether material; review the source site's current terms and
+attribution requirements before redistributing a frozen desktop application.
+
 ## Modern Web Guidance
 
 The developer guidance under `.agents/skills/modern-web-guidance/` originates

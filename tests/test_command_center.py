@@ -176,17 +176,22 @@ def test_dashboard_serves_latest_metrics_and_escapes_status(matrix):
             assert "connect-src 'self'" in policy
             assert "frame-ancestors 'none'" in policy
             assert "object-src 'none'" in policy
+            assert "style-src 'self' 'unsafe-inline'" in policy
+            assert "script-src 'self'" in policy
             assert "script-src 'unsafe-inline'" not in policy
             assert inline_script is not None
             script_hash = base64.b64encode(
                 hashlib.sha256(inline_script.group(1).encode("utf-8")).digest()
             ).decode("ascii")
-            assert f"script-src 'sha256-{script_hash}'" in policy
+            assert f"'sha256-{script_hash}'" in policy
             assert response.headers["X-Frame-Options"] == "DENY"
             assert response.headers["Referrer-Policy"] == "no-referrer"
             assert 'src="/weather"' in page
             assert '<a class="skip-link" href="#main-content">' in page
             assert 'id="motion-toggle"' in page
+            assert "<aether-hypothalamus>" in page
+            assert 'src="/hypothalamus.js"' in page
+            assert 'href="/hypothalamus.css"' in page
             assert "color-scheme:dark" in page
             assert "transition:all" not in page
             assert "document.hidden || artsTelemetryInFlight" in page
@@ -259,9 +264,12 @@ def test_dashboard_shows_latest_matrix_arts_telemetry(matrix, tmp_path, monkeypa
     ("path", "content_type", "marker"),
     [
         ("/weather", "text/html", b"Copernicus &amp; Observatory"),
+        ("/initial_state", "text/html", "AetherSystem — Engine Initial State".encode()),
         ("/weather.css", "text/css", b"prefers-color-scheme: dark"),
         ("/weather.js", "text/javascript", b"cloud_cover"),
         ("/copernicus.js", "text/javascript", b"/api/chat"),
+        ("/hypothalamus.js", "text/javascript", b"AetherHypothalamus"),
+        ("/hypothalamus.css", "text/css", b"hypothalamus-pulse"),
         ("/stargazer", "text/html", b"ILLUSTRATIVE SKY"),
         ("/stargazer.css", "text/css", b"--star-glow"),
         ("/stargazer.js", "text/javascript", b"CONSTELLATIONS"),
@@ -276,6 +284,11 @@ def test_frontend_assets_are_served_without_reading_private_telemetry(
         prefix = tmp_path / "installed"
         destination = prefix / "share" / "aether-engine" / "observatory"
         shutil.copytree(source, destination)
+        if path == "/initial_state":
+            shutil.copy2(
+                Path(matrix.__file__).resolve().parent / "initial_state.html",
+                prefix / "share" / "aether-engine" / "initial_state.html",
+            )
         monkeypatch.setattr(matrix, "__file__", str(prefix / "site" / "aether_master_matrix.py"))
         monkeypatch.setattr(matrix.sys, "prefix", str(prefix))
     matrix.LOG_FILE.write_text("{invalid", encoding="utf-8")
@@ -290,14 +303,21 @@ def test_frontend_assets_are_served_without_reading_private_telemetry(
             assert response.headers["Content-Type"].startswith(content_type)
             assert response.headers["Cache-Control"] == "no-cache"
             policy = response.headers["Content-Security-Policy"]
-            if not path.startswith("/stargazer"):
+            if path == "/initial_state":
+                assert "connect-src 'self' http://127.0.0.1:11434" in policy
+                assert "script-src 'unsafe-inline'" in policy
+            elif not path.startswith("/stargazer"):
                 assert (
                     "connect-src 'self' https://api.open-meteo.com https://geocoding-api.open-meteo.com"
                     in policy
                 )
             else:
                 assert "connect-src 'self'" in policy
-            assert "frame-ancestors 'self'" in policy
+            assert (
+                "frame-ancestors 'none'" in policy
+                if path == "/initial_state"
+                else "frame-ancestors 'self'" in policy
+            )
             content = response.read()
             assert marker in content
             if path == "/weather":
@@ -348,6 +368,23 @@ def test_copernicus_chat_uses_session_context_and_optional_weather(matrix, monke
         assert model_status["status"] == "pending"
         with urlopen(f"{base_url}/api/clock") as response:
             assert "+00:00" in json.loads(response.read())["utc"]
+        with urlopen(
+            f"{base_url}/api/languages/validate?q=es"
+        ) as response:
+            assert json.loads(response.read()) == {
+                "valid": True,
+                "name": "Spanish",
+                "iso_639_3": "spa",
+                "iso_639_1": "es",
+                "type": "L",
+            }
+        with pytest.raises(HTTPError) as language_error:
+            urlopen(f"{base_url}/api/languages/validate?q=not-a-language")
+        assert language_error.value.code == 404
+        with urlopen(f"{base_url}/initial_state") as response:
+            page = response.read()
+            assert b"/api/languages/validate" in page
+            assert b"serviceBacked" in page
         request = Request(
             f"{base_url}/api/chat",
             data=json.dumps({"message": "Hello"}).encode(),
@@ -361,6 +398,31 @@ def test_copernicus_chat_uses_session_context_and_optional_weather(matrix, monke
         assert result["request_utc"] <= result["response_utc"]
         assert observed["prompt"] == "Hello"
         assert "no persistent profile or memory" in observed["system"]
+        assert "ISO 639-3: eng" in observed["system"]
+
+        spanish_request = Request(
+            f"{base_url}/api/chat",
+            data=json.dumps(
+                {"message": "Hola", "target_language": "es"}
+            ).encode(),
+            headers={"Content-Type": "application/json"},
+            method="POST",
+        )
+        with urlopen(spanish_request) as response:
+            assert response.status == 200
+        assert "Respond fluently in Spanish (ISO 639-3: spa" in observed["system"]
+
+        invalid_language_request = Request(
+            f"{base_url}/api/chat",
+            data=json.dumps(
+                {"message": "Hello", "target_language": "not-a-language"}
+            ).encode(),
+            headers={"Content-Type": "application/json"},
+            method="POST",
+        )
+        with pytest.raises(HTTPError) as error:
+            urlopen(invalid_language_request)
+        assert error.value.code == 422
 
         weather_context = {
             "city": "Upland, CA",

@@ -52,6 +52,7 @@ py-modules = [
     "matrix_academic_benchmarks",
     "workspace_matrix_bridge",
     "food_matrix_streamer",
+    "copernicus_language_bridge",
 ]
 package-dir = {"" = ".", "aether_engine" = "src/aether_engine"}
 
@@ -60,10 +61,18 @@ where = ["src", "."]
 include = ["aether_engine*", "automator"]
 
 [tool.setuptools.package-data]
-aether_engine = ["galileo_assets/*", "galileo_voice.swift"]
+aether_engine = ["galileo_assets/*", "galileo_voice.swift", "world_languages_full.json"]
 
 [tool.setuptools.data-files]
-"share/aether-engine" = ["ACADEMIC_CREED.md"]
+"share/aether-engine" = [
+    "ACADEMIC_CREED.md",
+    "initial_state.html",
+    "empathy_adaptability.json",
+    "human_sciences_knowledge.json",
+    "music_empathy_framework.json",
+    "radio_information_principles.json",
+    "darma_observable_evaluation.json",
+]
 "share/aether-engine/frontend" = ["frontend/aether_client.js", "frontend/index.html", "frontend/monitor_tasks.js"]
 "share/aether-engine/frontend/tasks" = [
     "frontend/tasks/index.html", "frontend/tasks/tasks.css",
@@ -80,6 +89,7 @@ aether_engine = ["galileo_assets/*", "galileo_voice.swift"]
     "frontend/stargazer.html", "frontend/stargazer.css", "frontend/stargazer.js",
     "frontend/astronomy.css", "frontend/speech.js",
     "frontend/copernicus.js", "frontend/persona_matrix.js", "frontend/persona_matrix.css",
+    "frontend/hypothalamus.js", "frontend/hypothalamus.css",
 ]
 
 [tool.pytest.ini_options]
