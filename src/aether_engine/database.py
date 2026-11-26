@@ -26,25 +26,25 @@ def _windows_principal() -> str:
 
 def _secure_windows_file(path: Path) -> None:
     principal = _windows_principal()
-    try:
-        result = subprocess.run(
-            [
-                "icacls",
-                str(path),
-                "/reset",
-                "/inheritance:r",
-                "/grant:r",
-                f"{principal}:(F)",
-            ],
-            capture_output=True,
-            text=True,
-            check=False,
-        )
-    except OSError as error:
-        raise PermissionError(f"Could not secure database file {path}: {error}") from error
-    if result.returncode != 0:
-        detail = result.stderr.strip() or result.stdout.strip()
-        raise PermissionError(f"Could not secure database file {path}: {detail}")
+    # icacls /reset cannot be combined with permission-editing switches.
+    for arguments in (
+        ["/reset"],
+        ["/inheritance:r", "/grant:r", f"{principal}:(F)"],
+    ):
+        try:
+            result = subprocess.run(
+                ["icacls", str(path), *arguments],
+                capture_output=True,
+                text=True,
+                check=False,
+            )
+        except OSError as error:
+            raise PermissionError(
+                f"Could not secure database file {path}: {error}"
+            ) from error
+        if result.returncode != 0:
+            detail = result.stderr.strip() or result.stdout.strip()
+            raise PermissionError(f"Could not secure database file {path}: {detail}")
 
 
 def database_permission_issues(database_path: str | Path) -> list[str]:

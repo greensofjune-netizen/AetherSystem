@@ -383,6 +383,10 @@ def test_windows_database_acl_is_restricted_to_current_user(
 
     def fake_icacls(command: list[str], **_kwargs) -> subprocess.CompletedProcess[str]:
         calls.append(command)
+        if "/reset" in command and len(command) != 3:
+            return subprocess.CompletedProcess(
+                command, 87, "", 'Invalid parameter "/inheritance:r"'
+            )
         return subprocess.CompletedProcess(command, 0, "Successfully processed", "")
 
     monkeypatch.setenv("USERDOMAIN", "AETHER")
@@ -396,11 +400,37 @@ def test_windows_database_acl_is_restricted_to_current_user(
             "icacls",
             str(path),
             "/reset",
+        ],
+        [
+            "icacls",
+            str(path),
             "/inheritance:r",
             "/grant:r",
             "AETHER\\engine-user:(F)",
         ]
     ]
+
+
+@pytest.mark.parametrize("failed_call", [1, 2])
+def test_windows_database_acl_failure_is_reported_and_stops(
+    tmp_path: Path, monkeypatch, failed_call: int
+) -> None:
+    calls: list[list[str]] = []
+
+    def fake_icacls(command: list[str], **_kwargs) -> subprocess.CompletedProcess[str]:
+        calls.append(command)
+        if len(calls) == failed_call:
+            return subprocess.CompletedProcess(command, 5, "", "Access is denied.")
+        return subprocess.CompletedProcess(command, 0, "Successfully processed", "")
+
+    monkeypatch.setenv("USERDOMAIN", "AETHER")
+    monkeypatch.setenv("USERNAME", "engine-user")
+    monkeypatch.setattr("aether_engine.database.subprocess.run", fake_icacls)
+
+    with pytest.raises(PermissionError, match="Access is denied"):
+        _secure_windows_file(tmp_path / "private.sqlite3")
+
+    assert len(calls) == failed_call
 
 
 def test_task_can_be_edited_and_reopened(tmp_path: Path, capsys) -> None:
