@@ -1,5 +1,7 @@
 .aether-engine.sqlite3*
 .aether-lineage/
+.private-archives/
+.private-keys/
 .aether-backups/
 backups/
 .venv/

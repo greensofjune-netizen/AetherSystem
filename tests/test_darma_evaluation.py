@@ -91,6 +91,7 @@ def test_darma_comparison_measures_baseline_policy_and_repetitions():
     )
 
     assert report["scope"] == "LOCAL_MODEL_OBSERVABLE_OUTPUT_COMPARISON"
+    assert report["hypothesis_status"] == "OPEN_FALSIFIABLE_HYPOTHESIS"
     assert report["baseline_full_passes"] == 0
     assert report["darma_full_passes"] == 2
     assert report["observable_policy_improved_full_passes"] is True

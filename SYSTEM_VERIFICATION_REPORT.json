@@ -1,0 +1,50 @@
+{
+  "report_schema": 1,
+  "report_generated_at_utc": "2026-11-20T07:41:18Z",
+  "repository": "greensofjune-netizen/AetherSystem",
+  "git_head": "aae3c2993b5938bb4bcd85b47396b6f8720f64e3",
+  "branch": "main",
+  "working_tree": "DIRTY_UNCOMMITTED_CHANGES",
+  "source_snapshot_sha256": "4570c37562dcd955efdfbfae78e1d54eef5b92f13c7e96c9b35f70be8b1a9f88",
+  "source_snapshot_definition": "SHA-256 of a manifest containing HEAD, SHA-256 of git diff --binary HEAD, and sorted paths plus SHA-256 digests for untracked non-ignored files.",
+  "source_snapshot_untracked_file_count": 12,
+  "source_snapshot_excludes": "SYSTEM_VERIFICATION_REPORT.json",
+  "source_unchanged_during_validation": true,
+  "software_validation": {
+    "command": "python3 -m pytest -q",
+    "started_at_utc": "2026-11-20T07:33:49+00:00",
+    "finished_at_utc": "2026-11-20T07:37:53+00:00",
+    "python_version": "3.14.7",
+    "pytest_version": "pytest 9.2.0",
+    "status": "PASS",
+    "passed": 676,
+    "skipped": 4,
+    "failed": 0,
+    "summary": "676 passed, 4 skipped in 243.34s (0:04:03)"
+  },
+  "hardware_scope": {
+    "read_only_usb_enumeration": "RECORDED_SEPARATELY_IN_PRIVATE_LOCAL_MATRIX_LEDGER",
+    "storage_identification_query": {
+      "status": "NOT_VERIFIED",
+      "target_match": "UNIQUE_USER_DESIGNATED_EXTERNAL_STORAGE",
+      "manufacturer_reported_by_os": "UNKNOWN",
+      "exact_model_reported_by_os": "UNKNOWN",
+      "generic_media_name_reported_by_os": "USB 3.2",
+      "smart_support_reported_by_os": "NOT_SUPPORTED",
+      "filesystem_operation_during_query": "NONE",
+      "disk_identifier_volume_name_or_serial_retained": false,
+      "limitations": [
+        "The generic media name does not identify a manufacturer or exact model.",
+        "Unsupported SMART reporting is inconclusive; it is not evidence of failure or health."
+      ]
+    },
+    "device_health": "NOT_MEASURED",
+    "physical_recovery": "NOT_PERFORMED",
+    "academic_certification": "NOT_A_CERTIFICATION"
+  },
+  "integrity_limits": [
+    "The source snapshot digest identifies this working-tree state but is not a digital signature.",
+    "The test run provides local software regression evidence only.",
+    "This report does not establish hardware health, physical recovery readiness, scientific validity, or academic certification."
+  ]
+}

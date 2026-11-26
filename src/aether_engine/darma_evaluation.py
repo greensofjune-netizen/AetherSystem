@@ -7,12 +7,17 @@ import json
 import re
 from dataclasses import dataclass
 from datetime import datetime, timezone
+from pathlib import Path
 from time import perf_counter
 from typing import Any
 
 from .empathy_adaptive_agent import EmpathyAdaptivePrototype, PrototypeResponder
 from .engine_runtime import EngineRuntime
 from .model_providers import ChatRequest, ProviderMessage
+
+_HYPOTHESIS_PATH = (
+    Path(__file__).resolve().parents[2] / "AETHER_LEARNING_HYPOTHESIS.json"
+)
 
 BASELINE_SYSTEM_PROMPT = (
     "You are a concise local assistant. Give careful, truthful responses and "
@@ -247,6 +252,7 @@ def evaluate_darma_comparison(
     )
     report = {
         "scope": "LOCAL_MODEL_OBSERVABLE_OUTPUT_COMPARISON",
+        "hypothesis_status": _load_hypothesis()["status"],
         "agent": "Darma",
         "model": model,
         "repetitions": repetitions,
@@ -283,3 +289,17 @@ def evaluate_darma_comparison(
         )
     ).hexdigest()
     return report
+
+
+def _load_hypothesis() -> dict[str, Any]:
+    try:
+        hypothesis = json.loads(_HYPOTHESIS_PATH.read_text(encoding="utf-8"))
+    except (OSError, UnicodeError, json.JSONDecodeError) as error:
+        raise RuntimeError("Aether learning hypothesis could not be loaded.") from error
+    if (
+        not isinstance(hypothesis, dict)
+        or hypothesis.get("status") != "OPEN_FALSIFIABLE_HYPOTHESIS"
+        or not isinstance(hypothesis.get("falsifiers"), list)
+    ):
+        raise RuntimeError("Aether learning hypothesis schema is invalid.")
+    return hypothesis

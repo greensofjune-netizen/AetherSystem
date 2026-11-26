@@ -72,6 +72,7 @@ aether_engine = ["galileo_assets/*", "galileo_voice.swift", "world_languages_ful
     "music_empathy_framework.json",
     "radio_information_principles.json",
     "darma_observable_evaluation.json",
+    "AETHER_LEARNING_HYPOTHESIS.json",
 ]
 "share/aether-engine/frontend" = ["frontend/aether_client.js", "frontend/index.html", "frontend/monitor_tasks.js"]
 "share/aether-engine/frontend/tasks" = [
