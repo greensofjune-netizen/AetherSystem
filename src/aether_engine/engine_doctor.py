@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import os
 import sqlite3
 import sys
 import time
@@ -9,7 +10,11 @@ from pathlib import Path
 from typing import Final
 
 from .backups import _BACKUP_NAME
-from .database import AetherStore, database_permission_issues
+from .database import (
+    AetherStore,
+    _windows_acl_permission_issues,
+    database_permission_issues,
+)
 from .scheduler import SchedulerError, backup_schedule_status
 
 
@@ -166,7 +171,6 @@ class AetherEngineDoctor:
                     "Backups", "OK", f"Latest snapshot is valid: {latest.name}"
                 )
 
-        directory_mode = self.backup_dir.stat().st_mode & 0o777
         protected_files = [
             path
             for path in entries
@@ -175,23 +179,35 @@ class AetherEngineDoctor:
             or _BACKUP_NAME.fullmatch(path.name)
         ]
         unsafe_paths: list[str] = []
+        if os.name == "nt":
+            try:
+                unsafe_paths.extend(_windows_acl_permission_issues(self.backup_dir))
+            except OSError as error:
+                unsafe_paths.append(f"Could not check backup directory ACL: {error}")
+        else:
+            directory_mode = self.backup_dir.stat().st_mode & 0o777
+            if directory_mode & 0o077:
+                unsafe_paths.append(
+                    f"directory mode is {directory_mode:04o}, expected 0700"
+                )
         for path in protected_files:
             if path.is_symlink():
                 unsafe_paths.append(f"{path.name} is a symlink")
             elif path.exists():
                 if not path.is_file():
                     unsafe_paths.append(f"{path.name} is not a regular file")
+                elif os.name == "nt":
+                    try:
+                        unsafe_paths.extend(_windows_acl_permission_issues(path))
+                    except OSError as error:
+                        unsafe_paths.append(f"{path.name} ACL could not be checked: {error}")
                 elif path.stat().st_mode & 0o077:
                     unsafe_paths.append(
                         f"{path.name} is accessible by other users"
                     )
-        if directory_mode & 0o077 or unsafe_paths:
-            details = []
-            if directory_mode & 0o077:
-                details.append(f"directory mode is {directory_mode:04o}, expected 0700")
-            details.extend(unsafe_paths)
+        if unsafe_paths:
             permission_result = Diagnostic(
-                "Backup permissions", "FAIL", "; ".join(details)
+                "Backup permissions", "FAIL", "; ".join(unsafe_paths)
             )
         else:
             permission_result = Diagnostic(

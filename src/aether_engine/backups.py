@@ -7,7 +7,7 @@ import tempfile
 from datetime import datetime, timezone
 from pathlib import Path
 
-from .database import AetherStore
+from .database import AetherStore, _secure_windows_file
 
 DEFAULT_BACKUP_RETENTION = 30
 _BACKUP_NAME = re.compile(r"aether-backup-\d{8}T\d{6}\.\d{6}Z\.json")
@@ -17,7 +17,10 @@ def secure_backup_directory(directory: Path) -> None:
     if directory.is_symlink():
         raise ValueError(f"Refusing to use a symlink as the backup directory: {directory}")
     directory.mkdir(parents=True, exist_ok=True, mode=0o700)
-    directory.chmod(0o700)
+    if os.name == "nt":
+        _secure_windows_file(directory, directory=True)
+    else:
+        directory.chmod(0o700)
     for path in directory.iterdir():
         if path.is_symlink():
             continue
@@ -26,7 +29,10 @@ def secure_backup_directory(directory: Path) -> None:
             or path.name
             in ("launchd.stdout.log", "launchd.stderr.log", "last-exit-code")
         ):
-            path.chmod(0o600)
+            if os.name == "nt":
+                _secure_windows_file(path)
+            else:
+                path.chmod(0o600)
 
 
 def write_backup(
@@ -56,6 +62,8 @@ def write_backup(
             backup_file.write(serialized)
             backup_file.flush()
             os.fsync(backup_file.fileno())
+        if os.name == "nt":
+            _secure_windows_file(Path(temporary_name))
         os.link(temporary_name, backup_path)
     finally:
         if os.path.exists(temporary_name):

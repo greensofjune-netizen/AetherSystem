@@ -24,12 +24,13 @@ def _windows_principal() -> str:
     return f"{domain}\\{username}" if domain else username
 
 
-def _secure_windows_file(path: Path) -> None:
+def _secure_windows_file(path: Path, *, directory: bool = False) -> None:
     principal = _windows_principal()
+    permissions = "(OI)(CI)(F)" if directory else "(F)"
     # icacls /reset cannot be combined with permission-editing switches.
     for arguments in (
         ["/reset"],
-        ["/inheritance:r", "/grant:r", f"{principal}:(F)"],
+        ["/inheritance:r", "/grant:r", f"{principal}:{permissions}"],
     ):
         try:
             result = subprocess.run(
@@ -47,6 +48,38 @@ def _secure_windows_file(path: Path) -> None:
             raise PermissionError(f"Could not secure database file {path}: {detail}")
 
 
+def _windows_acl_permission_issues(path: Path) -> list[str]:
+    principal = _windows_principal().casefold()
+    try:
+        result = subprocess.run(
+            ["icacls", str(path)], capture_output=True, text=True, check=False
+        )
+    except OSError as error:
+        return [f"{path.name} ACL could not be checked: {error}"]
+    if result.returncode != 0:
+        detail = result.stderr.strip() or result.stdout.strip()
+        return [f"{path.name} ACL could not be checked: {detail}"]
+
+    # The first ACE shares the filename line; summary lines are not ACEs.
+    lines = result.stdout.splitlines()
+    prefix = f"{path} "
+    if not lines or not lines[0].startswith(prefix):
+        return [f"{path.name} ACL output could not be parsed"]
+    entries = [lines[0][len(prefix):].strip()]
+    for line in lines[1:]:
+        if not line.strip():
+            break
+        if not line[0].isspace():
+            return [f"{path.name} ACL output could not be parsed"]
+        entries.append(line.strip())
+    allowed = {f"{principal}:(F)".casefold()}
+    if path.is_dir():
+        allowed.add(f"{principal}:(OI)(CI)(F)".casefold())
+    if any(entry.casefold() not in allowed for entry in entries):
+        return [f"{path.name} ACL is not restricted to {principal} with full control"]
+    return []
+
+
 def database_permission_issues(database_path: str | Path) -> list[str]:
     path = Path(database_path)
     files = (
@@ -56,30 +89,10 @@ def database_permission_issues(database_path: str | Path) -> list[str]:
     )
     issues: list[str] = []
     if os.name == "nt":
-        principal = _windows_principal().casefold()
         for file_path in files:
             if not file_path.is_file():
                 continue
-            try:
-                result = subprocess.run(
-                    ["icacls", str(file_path)],
-                    capture_output=True,
-                    text=True,
-                    check=False,
-                )
-            except OSError as error:
-                issues.append(f"{file_path.name} ACL could not be checked: {error}")
-                continue
-            entries = [
-                line.strip()
-                for line in result.stdout.splitlines()[1:]
-                if line.strip()
-            ]
-            if result.returncode != 0 or not entries or any(
-                not entry.casefold().startswith(f"{principal}:")
-                for entry in entries
-            ):
-                issues.append(f"{file_path.name} ACL is not restricted to {principal}")
+            issues.extend(_windows_acl_permission_issues(file_path))
     else:
         for file_path in files:
             if file_path.is_file() and file_path.stat().st_mode & 0o077:

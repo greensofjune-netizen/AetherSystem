@@ -8,7 +8,11 @@ from pathlib import Path
 import pytest
 
 from aether_engine.cli import _resolve_database_path, launch_aether_shell, main
-from aether_engine.database import AetherStore, _secure_windows_file
+from aether_engine.database import (
+    AetherStore,
+    _secure_windows_file,
+    _windows_acl_permission_issues,
+)
 
 
 def test_interactive_shell_streams_ollama_response(monkeypatch, capsys) -> None:
@@ -431,6 +435,69 @@ def test_windows_database_acl_failure_is_reported_and_stops(
         _secure_windows_file(tmp_path / "private.sqlite3")
 
     assert len(calls) == failed_call
+
+
+@pytest.mark.parametrize(
+    ("aces", "secure"),
+    [
+        ("AETHER\\engine-user:(F)", True),
+        ("aether\\ENGINE-USER:(F)", True),
+        ("AETHER\\engine-user:(R)", False),
+        ("AETHER\\engine-user:(I)(F)", False),
+        ("BUILTIN\\Users:(F)\n    AETHER\\engine-user:(F)", False),
+        ("AETHER\\engine-user:(F)\n    BUILTIN\\Users:(R)", False),
+        ("", False),
+    ],
+)
+def test_windows_acl_checks_first_and_continuation_entries(
+    tmp_path: Path, monkeypatch, aces: str, secure: bool
+) -> None:
+    path = tmp_path / "private database.sqlite3"
+    path.touch()
+    monkeypatch.setenv("USERDOMAIN", "AETHER")
+    monkeypatch.setenv("USERNAME", "engine-user")
+    output = f"{path} {aces}\n\nSuccessfully processed 1 files; Failed processing 0 files\n"
+    monkeypatch.setattr(
+        "aether_engine.database.subprocess.run",
+        lambda command, **kwargs: subprocess.CompletedProcess(command, 0, output, ""),
+    )
+
+    assert (_windows_acl_permission_issues(path) == []) is secure
+
+
+@pytest.mark.parametrize(
+    ("returncode", "output"), [(5, "Access denied"), (0, "unrecognized output")]
+)
+def test_windows_acl_read_failures_are_not_success(
+    tmp_path: Path, monkeypatch, returncode: int, output: str
+) -> None:
+    monkeypatch.setenv("USERNAME", "engine-user")
+    monkeypatch.setattr(
+        "aether_engine.database.subprocess.run",
+        lambda command, **kwargs: subprocess.CompletedProcess(
+            command, returncode, output, ""
+        ),
+    )
+    assert _windows_acl_permission_issues(tmp_path / "private.sqlite3")
+
+
+def test_windows_directory_acl_grants_inheritable_owner_access(
+    tmp_path: Path, monkeypatch
+) -> None:
+    calls: list[list[str]] = []
+    monkeypatch.setenv("USERDOMAIN", "AETHER")
+    monkeypatch.setenv("USERNAME", "engine-user")
+
+    def run(command: list[str], **kwargs) -> subprocess.CompletedProcess[str]:
+        calls.append(command)
+        output = f"{tmp_path} AETHER\\engine-user:(OI)(CI)(F)\n\nSummary\n"
+        return subprocess.CompletedProcess(command, 0, output, "")
+
+    monkeypatch.setattr("aether_engine.database.subprocess.run", run)
+    _secure_windows_file(tmp_path, directory=True)
+
+    assert calls[1][-1] == "AETHER\\engine-user:(OI)(CI)(F)"
+    assert _windows_acl_permission_issues(tmp_path) == []
 
 
 def test_task_can_be_edited_and_reopened(tmp_path: Path, capsys) -> None:
